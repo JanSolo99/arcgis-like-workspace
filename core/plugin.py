@@ -17,6 +17,7 @@ from qgis.PyQt.QtWidgets import QAction, QMessageBox
 
 from .compat import QGIS_INFO, QGIS_WARNING
 from .constants import Keys, MENU_NAME, SETTINGS_PREFIX
+from .contextual_ribbon import ContextualRibbon
 from .docks import DockArranger
 from .layertree_menu import LayerTreeLabelingMenu
 from .reversible import FeatureRegistry
@@ -59,6 +60,11 @@ class ArcGISLikeWorkspacePlugin:
         self.layertree_menu = LayerTreeLabelingMenu(iface)
         self.features.register(
             "layertree_menu", self.layertree_menu.apply, self.layertree_menu.restore
+        )
+
+        self.contextual_ribbon = ContextualRibbon(iface, self.toolbars)
+        self.features.register(
+            "contextual_ribbon", self.contextual_ribbon.apply, self.contextual_ribbon.restore
         )
 
         self.apply_action: Optional[QAction] = None
