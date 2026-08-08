@@ -24,6 +24,7 @@ from .locator_filter import LocatorFeature
 from .notifications import NotificationsDock
 from .reversible import FeatureRegistry
 from .settings_toggles import SettingsToggles
+from .shortcuts import ShortcutRemap
 from .stylesheet import StylesheetManager
 from .toolbars import ToolbarBuilder, standard_icon
 
@@ -77,9 +78,15 @@ class ArcGISLikeWorkspacePlugin:
         self.locator = LocatorFeature(iface, self.toolbars)
         self.features.register("locator", self.locator.apply, self.locator.restore)
 
+        #: Deliberately separate from self.features -- see module docstring
+        #: and shortcuts.ShortcutRemap.
+        self.shortcut_remap = ShortcutRemap(iface, self.settings)
+
         self.apply_action: Optional[QAction] = None
         self.restore_action: Optional[QAction] = None
         self.about_action: Optional[QAction] = None
+        self.apply_shortcuts_action: Optional[QAction] = None
+        self.restore_shortcuts_action: Optional[QAction] = None
         self.menu_actions: List[QAction] = []
 
     def initGui(self):
@@ -99,11 +106,23 @@ class ArcGISLikeWorkspacePlugin:
             self.show_about,
             "SP_MessageBoxInformation",
         )
+        self.apply_shortcuts_action = self._make_plugin_action(
+            "Apply ArcGIS-like Shortcuts (opt-in)",
+            self.apply_shortcuts,
+            "SP_FileDialogListView",
+        )
+        self.restore_shortcuts_action = self._make_plugin_action(
+            "Restore Original Shortcuts",
+            self.restore_shortcuts,
+            "SP_BrowserReload",
+        )
 
         self.menu_actions = [
             self.apply_action,
             self.restore_action,
             self.about_action,
+            self.apply_shortcuts_action,
+            self.restore_shortcuts_action,
         ]
 
         for action in self.menu_actions:
@@ -126,6 +145,15 @@ class ArcGISLikeWorkspacePlugin:
             self.toolbars.remove_workspace_toolbars()
             self.docks.restore_titles()
             self.stylesheet.restore()
+
+        # Safety net: the shortcut remap has its own explicit Restore action
+        # (see shortcuts.ShortcutRemap), but disabling the plugin should
+        # still be able to undo it automatically, same as the main
+        # workspace above -- otherwise a remap applied in a session where
+        # the user forgets to click Restore before disabling the plugin
+        # would stick indefinitely.
+        if self.shortcut_remap.has_saved_state():
+            self.shortcut_remap.restore()
 
     def apply_layout(self):
         """Apply the ArcGIS-like workspace: save current state, create ribbon + tab toolbars,
@@ -166,6 +194,27 @@ class ArcGISLikeWorkspacePlugin:
                 "No saved workspace was found. QGIS kept the current layout.",
                 QGIS_WARNING,
             )
+
+    def apply_shortcuts(self):
+        """Apply the opt-in, curated ArcGIS-like keyboard shortcut remap.
+
+        Independent of apply_layout() -- see shortcuts.ShortcutRemap for why."""
+        count = self.shortcut_remap.apply()
+        if count:
+            self._notify(f"Applied {count} ArcGIS-like keyboard shortcut(s).")
+        else:
+            self._notify(
+                "No shortcuts were changed (already applied, already customized, or in use elsewhere).",
+                QGIS_WARNING,
+            )
+
+    def restore_shortcuts(self):
+        """Restore the original keyboard shortcuts changed by apply_shortcuts()."""
+        count = self.shortcut_remap.restore()
+        if count:
+            self._notify(f"Restored {count} original keyboard shortcut(s).")
+        else:
+            self._notify("No ArcGIS-like shortcuts were applied.", QGIS_WARNING)
 
     def show_about(self):
         """Display an informational About dialog."""
