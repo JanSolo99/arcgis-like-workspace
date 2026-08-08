@@ -18,6 +18,7 @@ from qgis.PyQt.QtWidgets import QAction, QMessageBox
 from .compat import QGIS_INFO, QGIS_WARNING
 from .constants import Keys, MENU_NAME, SETTINGS_PREFIX
 from .docks import DockArranger
+from .layertree_menu import LayerTreeLabelingMenu
 from .reversible import FeatureRegistry
 from .settings_toggles import SettingsToggles
 from .stylesheet import StylesheetManager
@@ -53,6 +54,11 @@ class ArcGISLikeWorkspacePlugin:
         self.settings_toggles = SettingsToggles(self.settings, self._key)
         self.features.register(
             "settings_toggles", self.settings_toggles.apply, self.settings_toggles.restore
+        )
+
+        self.layertree_menu = LayerTreeLabelingMenu(iface)
+        self.features.register(
+            "layertree_menu", self.layertree_menu.apply, self.layertree_menu.restore
         )
 
         self.apply_action: Optional[QAction] = None
