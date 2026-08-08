@@ -1,8 +1,8 @@
 [general]
 name=ArcGIS-like Workspace
-description=Applies an ArcGIS Pro-inspired workspace preset to QGIS using native QGIS actions, toolbars, dock widgets, and Qt styling.
-about=This plugin rearranges QGIS into an ArcGIS Pro-inspired workspace while keeping QGIS behavior native and reversible. It does not include Esri assets, branding, or proprietary UI code.
-version=0.1.0
+description=Applies an ArcGIS Pro-inspired workspace preset and behavior to QGIS using native QGIS actions, toolbars, dock widgets, settings, and Qt styling.
+about=This plugin rearranges QGIS into an ArcGIS Pro-inspired workspace and layers on genuine behavioral parity (contextual ribbon, Labeling toggle, Notifications, unified search, opt-in shortcuts) while keeping QGIS behavior native and reversible. It does not include Esri assets, branding, or proprietary UI code.
+version=0.2.0
 qgisMinimumVersion=3.28
 qgisMaximumVersion=4.99
 author=Codex
@@ -11,3 +11,14 @@ category=Plugins
 experimental=True
 deprecated=False
 tags=ui,workspace,toolbar,layout,arcgis
+changelog=0.2.0
+    - Restructured into an internal core/ package.
+    - Added native-setting toggles: docked attribute tables, default snapping.
+    - Added a one-click Labeling toggle to the Contents right-click menu.
+    - Promoted QGIS's native Identify Results and Log Messages docks.
+    - Added contextual ribbon groups that show/hide by active layer type.
+    - Added a Notifications dock (bell toggle for tasks and warnings).
+    - Added a unified locator filter for layers, tools, and bookmarks.
+    - Added an opt-in, reversible ArcGIS-like keyboard shortcut remap.
+    0.1.0
+    - Initial release: tab and ribbon toolbars, dock rearrangement, stylesheet.

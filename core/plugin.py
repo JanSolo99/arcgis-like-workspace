@@ -223,9 +223,13 @@ class ArcGISLikeWorkspacePlugin:
             "ArcGIS-like Workspace",
             (
                 "This plugin applies an ArcGIS Pro-inspired workspace preset "
-                "using native QGIS actions, toolbars, docks, and Qt styling.\n\n"
-                "It is a reversible layout and styling layer. It does not copy "
-                "Esri icons, branding, or proprietary ArcGIS UI code."
+                "using native QGIS actions, toolbars, docks, settings, and Qt "
+                "styling: layout and stylesheet, plus behavioral touches like a "
+                "contextual ribbon, a Labeling toggle, a Notifications dock, a "
+                "unified locator, and an opt-in keyboard shortcut remap.\n\n"
+                "It is a reversible layer on top of native QGIS behavior. It "
+                "does not copy Esri icons, branding, or proprietary ArcGIS UI "
+                "code, and it does not change QGIS's underlying project model."
             ),
         )
 
