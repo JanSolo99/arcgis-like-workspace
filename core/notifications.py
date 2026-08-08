@@ -103,7 +103,15 @@ class NotificationsDock:
             return
         self._add_entry(f"[{tag}] {message}")
 
-    def _on_task_added(self, task):
+    def _on_task_added(self, task_id):
+        # QgsTaskManager.taskAdded emits the task's integer id, not the
+        # QgsTask object itself -- confirmed the hard way: connecting
+        # task_id.taskCompleted directly raised AttributeError('int' object
+        # has no attribute 'taskCompleted') the first time a task (e.g.
+        # loading a raster) actually ran. Look the real task up by id.
+        task = QgsApplication.taskManager().task(task_id)
+        if task is None:
+            return
         description = self._task_description(task)
         self._add_entry(f"Task started: {description}")
         self._connections.connect(
