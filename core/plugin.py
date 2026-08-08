@@ -32,10 +32,13 @@ from .toolbars import ToolbarBuilder, standard_icon
 class ArcGISLikeWorkspacePlugin:
     """A reversible ArcGIS Pro-inspired workspace preset for QGIS.
 
-    Creates a ribbon-style toolbar layout with tabbed menus reminiscent of
-    ArcGIS Pro while using only native QGIS actions and Qt widgets. Docks
-    are rearranged into a Contents pane (left) and stacked Catalog /
-    Geoprocessing / Symbology panes (right).
+    Orchestrates the layout layer (tab/ribbon toolbars, dock rearrangement,
+    stylesheet -- toolbars.py/docks.py/stylesheet.py) and the behavioral
+    parity features registered with self.features (settings_toggles.py,
+    layertree_menu.py, contextual_ribbon.py, notifications.py,
+    locator_filter.py), plus the separately-lifecycled opt-in shortcut
+    remap (shortcuts.py). See core/reversible.py for the reversibility
+    contract every feature module follows.
     """
 
     def __init__(self, iface):

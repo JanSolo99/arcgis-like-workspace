@@ -174,8 +174,15 @@ class LocatorFeature:
                 logger.exception("ArcGIS-like Workspace: could not deregister locator filter")
             self._filter = None
 
-        if self._find_action is not None and self.toolbars.tab_toolbar is not None:
-            self.toolbars.tab_toolbar.removeAction(self._find_action)
+        if self._find_action is not None:
+            if self.toolbars.tab_toolbar is not None:
+                self.toolbars.tab_toolbar.removeAction(self._find_action)
+            # Parented to iface.mainWindow() (long-lived), not to anything
+            # this plugin destroys on restore -- unlike the notifications
+            # dock's toggle action (owned/deleted by its QDockWidget), this
+            # one needs an explicit deleteLater() or it would be orphaned
+            # with a live signal connection for the rest of the QGIS session.
+            self._find_action.deleteLater()
         self._find_action = None
 
     def _attach_find_action(self):
