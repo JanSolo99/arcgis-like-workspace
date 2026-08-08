@@ -1,10 +1,12 @@
-"""Dock widget rearrangement: Contents (left), Catalog/Geoprocessing/Symbology (right, tabbed)."""
+"""Dock widget rearrangement: Contents (left); Catalog, Geoprocessing,
+Symbology, and Identify Results (right, tabbed); Log Messages (bottom,
+hidden by default). All native QGIS docks -- nothing custom-built."""
 
 from typing import List, Optional
 
 from qgis.PyQt.QtWidgets import QDockWidget
 
-from .compat import LEFT_DOCK_WIDGET_AREA, RIGHT_DOCK_WIDGET_AREA
+from .compat import BOTTOM_DOCK_WIDGET_AREA, LEFT_DOCK_WIDGET_AREA, RIGHT_DOCK_WIDGET_AREA
 
 
 class DockArranger:
@@ -16,7 +18,8 @@ class DockArranger:
 
     def arrange(self):
         """Rearrange dock widgets: Contents on the left; Catalog, Geoprocessing,
-        and Symbology stacked on the right."""
+        Symbology, and Identify Results stacked on the right; Log Messages at
+        the bottom (kept hidden -- it also feeds the Notifications dock)."""
         contents = self.find_dock(
             ["layers", "layer tree", "legend", "toc"],
             exclude=["styling", "style", "symbology"],
@@ -24,6 +27,10 @@ class DockArranger:
         catalog = self.find_dock(["browser"])
         geoprocessing = self.find_dock(["processing"])
         symbology = self.find_dock(["styling", "style", "symbology"])
+        # Promoted in place of a custom Attributes pane -- QGIS's native
+        # Identify Results dock is a ready-made, selection/click-driven
+        # feature inspector with zero edit-buffer-conflict risk.
+        identify_results = self.find_dock(["identify results"])
 
         if contents is not None:
             self.rename_dock(contents, "Contents")
@@ -35,6 +42,7 @@ class DockArranger:
             (catalog, "Catalog"),
             (geoprocessing, "Geoprocessing"),
             (symbology, "Symbology"),
+            (identify_results, "Identify Results"),
         ]:
             if dock is None:
                 continue
@@ -49,6 +57,12 @@ class DockArranger:
 
         if right_anchor is not None:
             right_anchor.raise_()
+
+        log_messages = self.find_dock(["log messages"])
+        if log_messages is not None:
+            self.rename_dock(log_messages, "Log Messages")
+            self.window.addDockWidget(BOTTOM_DOCK_WIDGET_AREA, log_messages)
+            log_messages.setVisible(False)
 
     def find_dock(self, tokens: List[str], exclude: Optional[List[str]] = None) -> Optional[QDockWidget]:
         """Return the first dock whose name/title matches any *tokens* but none of *exclude*."""
