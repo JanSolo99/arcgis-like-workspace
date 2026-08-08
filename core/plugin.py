@@ -18,6 +18,7 @@ from qgis.PyQt.QtWidgets import QAction, QMessageBox
 from .compat import QGIS_INFO, QGIS_WARNING
 from .constants import Keys, MENU_NAME, SETTINGS_PREFIX
 from .docks import DockArranger
+from .reversible import FeatureRegistry
 from .stylesheet import StylesheetManager
 from .toolbars import ToolbarBuilder, standard_icon
 
@@ -39,6 +40,14 @@ class ArcGISLikeWorkspacePlugin:
         self.toolbars = ToolbarBuilder(iface, self.window)
         self.docks = DockArranger(self.window)
         self.stylesheet = StylesheetManager(self.window)
+
+        #: Feature modules (settings toggles, layer-tree menu, notifications,
+        #: locator filter) register their apply/restore pair here. Registered
+        #: once in __init__; the shortcut remap deliberately is NOT
+        #: registered here -- it has its own separate apply/restore actions
+        #: and settings namespace, since it must survive an ordinary
+        #: workspace restore (see constants.SHORTCUTS_SETTINGS_PREFIX).
+        self.features = FeatureRegistry()
 
         self.apply_action: Optional[QAction] = None
         self.restore_action: Optional[QAction] = None
@@ -100,11 +109,13 @@ class ArcGISLikeWorkspacePlugin:
         self.toolbars.create_ribbon_toolbar()
         self.docks.arrange()
         self.stylesheet.apply()
+        self.features.apply_all()
         self._notify("Applied the ArcGIS-like workspace preset.")
 
     def restore_layout(self):
         """Remove workspace toolbars, restore dock titles, remove the stylesheet,
         and restore the original main-window geometry and state."""
+        self.features.restore_all()
         self.toolbars.remove_workspace_toolbars()
         self.docks.restore_titles()
         self.stylesheet.restore()
