@@ -103,6 +103,9 @@ class ToolbarBuilder:
         self.created_toolbars: List[QToolBar] = []
         #: Populated by create_ribbon_toolbar(); label -> ActionGroup.
         self.action_groups: dict = {}
+        #: Set by create_tab_toolbar(); lets other feature modules (e.g. the
+        #: Notifications dock's bell toggle) attach their own actions to it.
+        self.tab_toolbar: Optional[QToolBar] = None
 
     def hide_default_toolbars(self):
         """Hide well-known QGIS default toolbars.
@@ -214,6 +217,7 @@ class ToolbarBuilder:
             toolbar.addWidget(self._make_menu_button(label, icon_action, action_specs))
 
         self._add_restore_button(toolbar, restore_callback)
+        self.tab_toolbar = toolbar
         return toolbar
 
     def create_ribbon_toolbar(self) -> QToolBar:
@@ -295,6 +299,7 @@ class ToolbarBuilder:
             toolbar.deleteLater()
         self.created_toolbars = []
         self.action_groups = {}
+        self.tab_toolbar = None
 
         for toolbar in self.window.findChildren(QToolBar):
             if toolbar.objectName().startswith(OBJECT_PREFIX):

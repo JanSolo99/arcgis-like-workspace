@@ -20,6 +20,7 @@ from .constants import Keys, MENU_NAME, SETTINGS_PREFIX
 from .contextual_ribbon import ContextualRibbon
 from .docks import DockArranger
 from .layertree_menu import LayerTreeLabelingMenu
+from .notifications import NotificationsDock
 from .reversible import FeatureRegistry
 from .settings_toggles import SettingsToggles
 from .stylesheet import StylesheetManager
@@ -65,6 +66,11 @@ class ArcGISLikeWorkspacePlugin:
         self.contextual_ribbon = ContextualRibbon(iface, self.toolbars)
         self.features.register(
             "contextual_ribbon", self.contextual_ribbon.apply, self.contextual_ribbon.restore
+        )
+
+        self.notifications = NotificationsDock(self.window, self.toolbars)
+        self.features.register(
+            "notifications", self.notifications.apply, self.notifications.restore
         )
 
         self.apply_action: Optional[QAction] = None
