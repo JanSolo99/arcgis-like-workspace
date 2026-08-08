@@ -20,6 +20,7 @@ from .constants import Keys, MENU_NAME, SETTINGS_PREFIX
 from .contextual_ribbon import ContextualRibbon
 from .docks import DockArranger
 from .layertree_menu import LayerTreeLabelingMenu
+from .locator_filter import LocatorFeature
 from .notifications import NotificationsDock
 from .reversible import FeatureRegistry
 from .settings_toggles import SettingsToggles
@@ -72,6 +73,9 @@ class ArcGISLikeWorkspacePlugin:
         self.features.register(
             "notifications", self.notifications.apply, self.notifications.restore
         )
+
+        self.locator = LocatorFeature(iface, self.toolbars)
+        self.features.register("locator", self.locator.apply, self.locator.restore)
 
         self.apply_action: Optional[QAction] = None
         self.restore_action: Optional[QAction] = None
