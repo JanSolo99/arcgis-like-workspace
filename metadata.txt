@@ -1,0 +1,13 @@
+[general]
+name=ArcGIS-like Workspace
+description=Applies an ArcGIS Pro-inspired workspace preset to QGIS using native QGIS actions, toolbars, dock widgets, and Qt styling.
+about=This plugin rearranges QGIS into an ArcGIS Pro-inspired workspace while keeping QGIS behavior native and reversible. It does not include Esri assets, branding, or proprietary UI code.
+version=0.1.0
+qgisMinimumVersion=3.28
+qgisMaximumVersion=4.99
+author=Codex
+email=
+category=Plugins
+experimental=True
+deprecated=False
+tags=ui,workspace,toolbar,layout,arcgis
