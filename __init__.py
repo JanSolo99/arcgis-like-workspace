@@ -1,4 +1,4 @@
 def classFactory(iface):
-    from .arcgis_like_workspace import ArcGISLikeWorkspacePlugin
+    from .core.plugin import ArcGISLikeWorkspacePlugin
 
     return ArcGISLikeWorkspacePlugin(iface)
