@@ -36,6 +36,19 @@ def qgis_message_level(name: str) -> Any:
     return getattr(Qgis.MessageLevel, name)
 
 
+def qgis_enum(container: Any, legacy_name: str, enum_group: str) -> Any:
+    """Return a QGIS enum value tolerant of pre/post-refactor enum locations.
+
+    Several QGIS enums (snapping types/units, message levels) moved from a
+    flat legacy attribute on their container class into a nested enum group
+    during the Qt6/QGIS-4 migration. Mirrors qt_enum()/widget_enum() above.
+    """
+    legacy_value = getattr(container, legacy_name, None)
+    if legacy_value is not None:
+        return legacy_value
+    return getattr(getattr(container, enum_group), legacy_name)
+
+
 TOOL_BUTTON_TEXT_UNDER_ICON = qt_enum("ToolButtonTextUnderIcon", "ToolButtonStyle")
 TOOL_BUTTON_TEXT_BESIDE_ICON = qt_enum("ToolButtonTextBesideIcon", "ToolButtonStyle")
 TOP_TOOLBAR_AREA = qt_enum("TopToolBarArea", "ToolBarArea")

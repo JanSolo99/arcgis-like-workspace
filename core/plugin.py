@@ -19,6 +19,7 @@ from .compat import QGIS_INFO, QGIS_WARNING
 from .constants import Keys, MENU_NAME, SETTINGS_PREFIX
 from .docks import DockArranger
 from .reversible import FeatureRegistry
+from .settings_toggles import SettingsToggles
 from .stylesheet import StylesheetManager
 from .toolbars import ToolbarBuilder, standard_icon
 
@@ -48,6 +49,11 @@ class ArcGISLikeWorkspacePlugin:
         #: and settings namespace, since it must survive an ordinary
         #: workspace restore (see constants.SHORTCUTS_SETTINGS_PREFIX).
         self.features = FeatureRegistry()
+
+        self.settings_toggles = SettingsToggles(self.settings, self._key)
+        self.features.register(
+            "settings_toggles", self.settings_toggles.apply, self.settings_toggles.restore
+        )
 
         self.apply_action: Optional[QAction] = None
         self.restore_action: Optional[QAction] = None
