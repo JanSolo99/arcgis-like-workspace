@@ -5,12 +5,14 @@ about=This plugin rearranges QGIS into an ArcGIS Pro-inspired workspace and laye
 version=0.2.0
 qgisMinimumVersion=3.28
 qgisMaximumVersion=4.99
-author=Codex
-email=
-category=Plugins
+author=Jan TvB
+email=jtedingvberkh@gmail.com
 experimental=True
 deprecated=False
 tags=ui,workspace,toolbar,layout,arcgis
+homepage=https://github.com/JanSolo99/arcgis-like-workspace
+repository=https://github.com/JanSolo99/arcgis-like-workspace
+tracker=https://github.com/JanSolo99/arcgis-like-workspace/issues
 changelog=0.2.0
     - Restructured into an internal core/ package.
     - Added native-setting toggles: docked attribute tables, default snapping.
