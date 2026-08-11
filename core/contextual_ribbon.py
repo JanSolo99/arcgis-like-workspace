@@ -78,4 +78,9 @@ class ContextualRibbon:
             try:
                 group.set_visible(visible)
             except RuntimeError:
-                pass
+                # Underlying Qt widget already deleted -- safe to skip.
+                logger.debug(
+                    "ArcGIS-like Workspace: could not reset visibility for ribbon group '%s' (widget deleted)",
+                    group.label,
+                    exc_info=True,
+                )

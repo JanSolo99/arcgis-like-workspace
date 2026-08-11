@@ -141,8 +141,14 @@ class ShortcutRemap:
             if other is action:
                 continue
             try:
-                if other.shortcut() == sequence:
-                    return True
+                other_sequence = other.shortcut()
             except Exception:
+                logger.debug(
+                    "ArcGIS-like Workspace: could not read shortcut for action %r while checking collisions",
+                    other,
+                    exc_info=True,
+                )
                 continue
+            if other_sequence == sequence:
+                return True
         return False
