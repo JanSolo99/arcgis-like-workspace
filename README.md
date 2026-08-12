@@ -73,6 +73,7 @@ itself to still be QGIS's.
 |-------------------------------------------|--------------------------------------------------------------------|
 | **Apply ArcGIS-like Workspace**           | Toolbar icon or **Plugins → ArcGIS-like Workspace** menu           |
 | **Restore Previous QGIS Workspace**       | "Restore" button on the tab toolbar, or the plugin menu            |
+| **Reset to Default QGIS Workspace**       | "Reset to Default" button on the tab toolbar, or the plugin menu — a stronger reset than Restore, see below |
 | **About**                                 | **Plugins → ArcGIS-like Workspace → About This Workspace**         |
 | **Notifications**                         | Bell button on the tab toolbar (shows an unread count when hidden) |
 | **Find (layers, tools, bookmarks)**       | "Find" button on the tab toolbar, or QGIS's native `Ctrl+K`        |
@@ -86,6 +87,17 @@ session). The opt-in shortcut remap has its own explicit Restore action
 because it persists directly to QGIS's own settings the moment it's
 applied — see the note in `core/shortcuts.py` — but disabling the plugin
 will still restore it automatically as a safety net if you forget.
+
+**Restore vs. Reset to Default:** Restore returns QGIS to *your* layout
+as it was right before you clicked Apply — if you'd already hidden some
+toolbars yourself, Restore brings back that same customized state.
+**Reset to Default QGIS Workspace** goes further: it undoes this
+plugin's changes the same way Restore does, then additionally forces
+every known QGIS default toolbar and the core Contents/Catalog panels
+visible, regardless of what your layout looked like before. Panel
+*positions* aren't part of this — QGIS's exact default layout is
+hardcoded at application startup and isn't something a plugin can replay
+on demand, so a pixel-perfect factory reset still needs a QGIS restart.
 
 **One exception to "fully reversible":** the Contents right-click menu
 switches to this plugin's own reconstructed menu (zoom, rename, remove,

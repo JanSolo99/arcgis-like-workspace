@@ -87,6 +87,7 @@ class ArcGISLikeWorkspacePlugin:
 
         self.apply_action: Optional[QAction] = None
         self.restore_action: Optional[QAction] = None
+        self.reset_action: Optional[QAction] = None
         self.about_action: Optional[QAction] = None
         self.apply_shortcuts_action: Optional[QAction] = None
         self.restore_shortcuts_action: Optional[QAction] = None
@@ -103,6 +104,11 @@ class ArcGISLikeWorkspacePlugin:
             "Restore Previous QGIS Workspace",
             self.restore_layout,
             "SP_BrowserReload",
+        )
+        self.reset_action = self._make_plugin_action(
+            "Reset to Default QGIS Workspace",
+            self.reset_to_default_workspace,
+            "SP_DialogResetButton",
         )
         self.about_action = self._make_plugin_action(
             "About This Workspace",
@@ -123,6 +129,7 @@ class ArcGISLikeWorkspacePlugin:
         self.menu_actions = [
             self.apply_action,
             self.restore_action,
+            self.reset_action,
             self.about_action,
             self.apply_shortcuts_action,
             self.restore_shortcuts_action,
@@ -164,7 +171,7 @@ class ArcGISLikeWorkspacePlugin:
         self._save_original_window_state_once()
         self.toolbars.remove_workspace_toolbars()
         self.toolbars.hide_default_toolbars()
-        self.toolbars.create_tab_toolbar(self.restore_layout)
+        self.toolbars.create_tab_toolbar(self.restore_layout, self.reset_to_default_workspace)
         self.toolbars.create_ribbon_toolbar()
         self.docks.arrange()
         self.stylesheet.apply()
@@ -198,6 +205,42 @@ class ArcGISLikeWorkspacePlugin:
                 QGIS_WARNING,
             )
 
+    def reset_to_default_workspace(self):
+        """A stronger reset than Restore.
+
+        Restore only returns QGIS to whatever *your* layout looked like
+        right before you clicked Apply -- if that layout already had
+        toolbars hidden or panels tucked away for your own reasons,
+        Restore faithfully brings that back too. This action goes
+        further: after undoing everything this plugin's Apply did, it
+        also forces every known QGIS default toolbar visible and ensures
+        the core Contents/Catalog panels are visible, regardless of what
+        your prior layout had.
+
+        QGIS's exact default panel *positions* are hardcoded in its own
+        C++ startup code and aren't exposed to plugins to replay on
+        demand, so this covers visibility, not pixel-perfect positioning
+        -- a full factory-default layout still requires restarting QGIS.
+        """
+        self.restore_layout()
+        self.toolbars.show_default_toolbars()
+
+        contents = self.docks.find_dock(
+            ["layers", "layer tree", "legend", "toc"],
+            exclude=["styling", "style", "symbology"],
+        )
+        if contents is not None:
+            contents.setVisible(True)
+
+        catalog = self.docks.find_dock(["browser"])
+        if catalog is not None:
+            catalog.setVisible(True)
+
+        self._notify(
+            "Reset toolbars and core panels to QGIS defaults. Restart QGIS for a full "
+            "reset of default panel positions."
+        )
+
     def apply_shortcuts(self):
         """Apply the opt-in, curated ArcGIS-like keyboard shortcut remap.
 
@@ -230,9 +273,12 @@ class ArcGISLikeWorkspacePlugin:
                 "styling: layout and stylesheet, plus behavioral touches like a "
                 "contextual ribbon, a Labeling toggle, a Notifications dock, a "
                 "unified locator, and an opt-in keyboard shortcut remap.\n\n"
-                "It is a reversible layer on top of native QGIS behavior. It "
-                "does not copy Esri icons, branding, or proprietary ArcGIS UI "
-                "code, and it does not change QGIS's underlying project model."
+                "It is a reversible layer on top of native QGIS behavior -- "
+                "Restore returns to your prior layout, or Reset to Default QGIS "
+                "Workspace goes further and forces QGIS's own default toolbars/"
+                "panels visible. It does not copy Esri icons, branding, or "
+                "proprietary ArcGIS UI code, and it does not change QGIS's "
+                "underlying project model."
             ),
         )
 

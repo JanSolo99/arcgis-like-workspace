@@ -120,7 +120,19 @@ class ToolbarBuilder:
             if name in QGIS_DEFAULT_TOOLBAR_NAMES:
                 toolbar.setVisible(False)
 
-    def create_tab_toolbar(self, restore_callback: Callable) -> QToolBar:
+    def show_default_toolbars(self):
+        """Force every known QGIS default toolbar visible, regardless of
+        its previous visibility. Used by "Reset to Default QGIS
+        Workspace", which is a stronger reset than plain Restore -- it
+        doesn't just undo this plugin's hiding, it also overrides
+        whatever toolbar visibility you had *before* ever using this
+        plugin.
+        """
+        for toolbar in self.window.findChildren(QToolBar):
+            if toolbar.objectName() in QGIS_DEFAULT_TOOLBAR_NAMES:
+                toolbar.setVisible(True)
+
+    def create_tab_toolbar(self, restore_callback: Callable, reset_callback: Callable) -> QToolBar:
         """Build the tab-style toolbar with drop-down menus for each functional area."""
         toolbar = self._new_toolbar("Arc Layout: Tabs", "TabsToolbar", QSize(22, 22))
 
@@ -216,7 +228,7 @@ class ToolbarBuilder:
         for label, icon_action, action_specs in tabs:
             toolbar.addWidget(self._make_menu_button(label, icon_action, action_specs))
 
-        self._add_restore_button(toolbar, restore_callback)
+        self._add_restore_button(toolbar, restore_callback, reset_callback)
         self.tab_toolbar = toolbar
         return toolbar
 
@@ -364,12 +376,24 @@ class ToolbarBuilder:
         button.setMenu(menu)
         return button
 
-    def _add_restore_button(self, toolbar: QToolBar, restore_callback: Callable):
-        """Append a separator and a Restore button to *toolbar*."""
+    def _add_restore_button(self, toolbar: QToolBar, restore_callback: Callable, reset_callback: Callable):
+        """Append a separator, a Restore button, and a Reset-to-Default button to *toolbar*."""
         toolbar.addSeparator()
-        button = QToolButton(self.window)
-        button.setText("Restore")
-        button.setToolButtonStyle(TOOL_BUTTON_TEXT_BESIDE_ICON)
-        button.setIcon(standard_icon("SP_BrowserReload"))
-        button.clicked.connect(restore_callback)
-        toolbar.addWidget(button)
+
+        restore_button = QToolButton(self.window)
+        restore_button.setText("Restore")
+        restore_button.setToolButtonStyle(TOOL_BUTTON_TEXT_BESIDE_ICON)
+        restore_button.setIcon(standard_icon("SP_BrowserReload"))
+        restore_button.clicked.connect(restore_callback)
+        toolbar.addWidget(restore_button)
+
+        reset_button = QToolButton(self.window)
+        reset_button.setText("Reset to Default")
+        reset_button.setToolButtonStyle(TOOL_BUTTON_TEXT_BESIDE_ICON)
+        reset_button.setIcon(standard_icon("SP_DialogResetButton"))
+        reset_button.setToolTip(
+            "Undo this workspace and force QGIS's default toolbars/panels visible -- "
+            "a stronger reset than Restore, which only returns to your prior layout."
+        )
+        reset_button.clicked.connect(reset_callback)
+        toolbar.addWidget(reset_button)

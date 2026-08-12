@@ -26,6 +26,13 @@ session. Run through this checklist there before trusting a release.
 - [ ] **Restore Previous QGIS Workspace** — toolbars removed, dock
       titles reverted, stylesheet reverted, original window
       geometry/state restored.
+- [ ] **Reset to Default QGIS Workspace** — first, manually hide a
+      couple of QGIS's default toolbars (e.g. Layer, Digitizing) and
+      Apply, so your "prior layout" has some hidden toolbars. Click
+      Reset: confirm this plugin's toolbars/stylesheet are removed
+      *and* the manually-hidden toolbars come back too (unlike Restore,
+      which would have left them hidden). Confirm the Contents and
+      Catalog/Browser panels are visible afterward.
 
 ## New features (exercise each once after Apply)
 

@@ -4,6 +4,28 @@ All notable changes to this project are documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [0.3.0] - 2026-08-12
+
+### Added
+
+- **Reset to Default QGIS Workspace**: a new button (tab toolbar, next to
+  Restore) and plugin-menu action. Unlike Restore, which returns to
+  *your* pre-Apply layout (including any of your own toolbars/panels you
+  had hidden), Reset undoes this plugin's changes and then forces every
+  known QGIS default toolbar and the core Contents/Catalog panels
+  visible regardless of your prior layout. Panel *positions* aren't
+  replayed — QGIS's true default layout is built once, in its own C++
+  startup code, and isn't exposed for a plugin to reconstruct on demand,
+  so a fully pixel-perfect factory reset still needs a QGIS restart.
+  `ToolbarBuilder.show_default_toolbars()` (mirrors the existing
+  `hide_default_toolbars()`) forces default-toolbar visibility;
+  `DockArranger.find_dock()` (already used elsewhere) locates and shows
+  the Contents/Catalog docks.
+
+### Changed
+
+- `experimental` flipped to `False` — marked stable.
+
 ## [0.2.1] - 2026-08-12
 
 ### Fixed
