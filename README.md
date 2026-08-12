@@ -117,12 +117,16 @@ it — uncheck it yourself, from the same menu, to turn auto-apply back off.
 as it was right before you clicked Apply — if you'd already hidden some
 toolbars yourself, Restore brings back that same customized state.
 **Reset to Default QGIS Workspace** goes further: it undoes this
-plugin's changes the same way Restore does, then additionally forces
-every known QGIS default toolbar and the core Contents/Catalog panels
-visible, regardless of what your layout looked like before. Panel
-*positions* aren't part of this — QGIS's exact default layout is
-hardcoded at application startup and isn't something a plugin can replay
-on demand, so a pixel-perfect factory reset still needs a QGIS restart.
+plugin's changes the same way Restore does, then additionally resets
+every known QGIS toolbar to its true stock-install visibility (most of
+them — Digitizing, Snapping, Database, Raster, Vector, and a dozen
+others — are hidden in a default QGIS install; only Attributes, Manage
+Layers, Map Navigation, Project, and Selection are shown out of the
+box) and shows the core Contents/Catalog panels, regardless of what
+your layout looked like before. Panel *positions* aren't part of this
+— QGIS's exact default layout is hardcoded at application startup and
+isn't something a plugin can replay on demand, so a pixel-perfect
+factory reset still needs a QGIS restart.
 
 The Contents right-click menu itself is QGIS's real, native menu, untouched
 — this plugin only adds one "Toggle Labels" entry to it (via

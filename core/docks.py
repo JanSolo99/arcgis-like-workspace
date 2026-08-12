@@ -37,8 +37,8 @@ class DockArranger:
 
         if contents is not None:
             self.rename_dock(contents, "Contents")
+            self._move_dock(contents, LEFT_DOCK_WIDGET_AREA)
             contents.setVisible(True)
-            self.window.addDockWidget(LEFT_DOCK_WIDGET_AREA, contents)
 
         right_anchor = None
         for dock, title in [
@@ -50,8 +50,8 @@ class DockArranger:
             if dock is None:
                 continue
             self.rename_dock(dock, title)
+            self._move_dock(dock, RIGHT_DOCK_WIDGET_AREA)
             dock.setVisible(True)
-            self.window.addDockWidget(RIGHT_DOCK_WIDGET_AREA, dock)
 
             if right_anchor is None:
                 right_anchor = dock
@@ -64,8 +64,25 @@ class DockArranger:
         log_messages = self.find_dock(["log messages"])
         if log_messages is not None:
             self.rename_dock(log_messages, "Log Messages")
-            self.window.addDockWidget(BOTTOM_DOCK_WIDGET_AREA, log_messages)
+            self._move_dock(log_messages, BOTTOM_DOCK_WIDGET_AREA)
             log_messages.setVisible(False)
+
+    def _move_dock(self, dock: QDockWidget, area):
+        """Reposition *dock* into *area*, reliably.
+
+        QMainWindow.addDockWidget() alone can fail to cleanly detach a
+        dock that's currently tabbed with another one (which Browser is,
+        by default, tabbed with Layers) -- the widget can stay visually
+        in its old spot until some later, unrelated layout change nudges
+        Qt into actually redoing the tab group. Explicitly removing it
+        first forces a clean re-parent into the target area on the very
+        first call, instead of needing a second Apply to "catch up".
+        Order also matters here: position before show, not the reverse --
+        moving an already-visible dock risks a render-in-old-spot flash
+        that setVisible(True)-then-move does not reliably avoid.
+        """
+        self.window.removeDockWidget(dock)
+        self.window.addDockWidget(area, dock)
 
     def find_dock(self, tokens: List[str], exclude: Optional[List[str]] = None) -> Optional[QDockWidget]:
         """Return the first dock whose name/title matches any *tokens* but none of *exclude*."""

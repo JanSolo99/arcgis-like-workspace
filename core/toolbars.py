@@ -20,7 +20,12 @@ from .compat import (
     TOOL_BUTTON_TEXT_UNDER_ICON,
     TOP_TOOLBAR_AREA,
 )
-from .constants import OBJECT_PREFIX, QGIS_DEFAULT_TOOLBAR_NAMES
+from .constants import (
+    OBJECT_PREFIX,
+    QGIS_DEFAULT_TOOLBAR_NAMES,
+    QGIS_DEFAULT_VISIBLE_TOOLBAR_NAMES,
+    QGIS_EDITING_TOOLBAR_NAMES,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -143,16 +148,26 @@ class ToolbarBuilder:
                 toolbar.setVisible(False)
 
     def show_default_toolbars(self):
-        """Force every known QGIS default toolbar visible, regardless of
-        its previous visibility. Used by "Reset to Default QGIS
-        Workspace", which is a stronger reset than plain Restore -- it
-        doesn't just undo this plugin's hiding, it also overrides
-        whatever toolbar visibility you had *before* ever using this
-        plugin.
+        """Reset every known QGIS toolbar to its TRUE stock-install
+        visibility, regardless of its current state: the handful that
+        QGIS itself shows by default (QGIS_DEFAULT_VISIBLE_TOOLBAR_NAMES)
+        are shown, everything else this plugin knows about -- including
+        the editing toolbars Apply deliberately leaves alone -- is
+        hidden, because that's what a stock QGIS install actually looks
+        like. Forcing every KNOWN toolbar visible (the previous
+        behavior) is not a default reset, it's toolbar soup: QGIS itself
+        keeps most of them hidden out of the box.
+
+        Used by "Reset to Default QGIS Workspace", which is a stronger
+        reset than plain Restore -- it doesn't just undo this plugin's
+        hiding, it also overrides whatever toolbar visibility you had
+        *before* ever using this plugin.
         """
+        known = QGIS_DEFAULT_TOOLBAR_NAMES | QGIS_EDITING_TOOLBAR_NAMES
         for toolbar in self.window.findChildren(QToolBar):
-            if toolbar.objectName() in QGIS_DEFAULT_TOOLBAR_NAMES:
-                toolbar.setVisible(True)
+            name = toolbar.objectName()
+            if name in known:
+                toolbar.setVisible(name in QGIS_DEFAULT_VISIBLE_TOOLBAR_NAMES)
 
     def create_tab_toolbar(self, restore_callback: Callable, reset_callback: Callable) -> QToolBar:
         """Build the tab-style toolbar with drop-down menus for each functional area."""

@@ -37,11 +37,14 @@ Run through this checklist there before trusting a release.
 
 - [ ] **Apply ArcGIS-like Workspace** — tab toolbar and ribbon toolbar
       appear; Contents/Catalog/Geoprocessing/Symbology docks are
-      arranged and renamed; stylesheet is applied; default QGIS
-      toolbars are hidden. **Also confirm the Digitizing, Advanced
-      Digitizing, Snapping, and Label toolbars stay visible** — as of
-      0.4.0 Apply no longer hides them (the ribbon's Edit group doesn't
-      cover their capability; see `core/constants.py`).
+      arranged and renamed **on the very first click** (Browser in
+      particular starts tabbed with Layers in a stock install and was
+      the one that needed a second Apply before 0.4.1 — see
+      `DockArranger._move_dock` if it regresses); stylesheet is applied;
+      default QGIS toolbars are hidden. **Also confirm the Digitizing,
+      Advanced Digitizing, Snapping, and Label toolbars stay visible** —
+      as of 0.4.0 Apply no longer hides them (the ribbon's Edit group
+      doesn't cover their capability; see `core/constants.py`).
 - [ ] **Restore Previous QGIS Workspace** — toolbars removed, dock
       titles reverted, stylesheet reverted, original window
       geometry/state restored.
@@ -49,9 +52,16 @@ Run through this checklist there before trusting a release.
       couple of QGIS's default toolbars (e.g. Layer, Digitizing) and
       Apply, so your "prior layout" has some hidden toolbars. Click
       Reset: confirm this plugin's toolbars/stylesheet are removed
-      *and* the manually-hidden toolbars come back too (unlike Restore,
-      which would have left them hidden). Confirm the Contents and
-      Catalog/Browser panels are visible afterward.
+      *and* the manually-hidden default-visible toolbars (Layer, etc.)
+      come back too (unlike Restore, which would have left them
+      hidden). **Then also confirm the toolbars QGIS itself hides by
+      default — Advanced Digitizing, Digitizing, Snapping, Label,
+      Database, Web, Raster, Vector, Annotations, Plugins, Help, Mesh/
+      Shape Digitizing — end up hidden after Reset, even if you'd
+      manually shown one of them first.** Before 0.4.1, Reset forced
+      every known toolbar visible regardless of QGIS's real defaults —
+      confirm this doesn't regress. Confirm the Contents and Catalog/
+      Browser panels are visible afterward.
 
 ## New features (exercise each once after Apply)
 

@@ -4,6 +4,37 @@ All notable changes to this project are documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [0.4.1] - 2026-08-12
+
+Two bugs found the same way the 0.4.0 ones should have been caught in the
+first place: actually running the plugin in real QGIS and comparing what
+happened against what was claimed. Both reported directly by a user testing
+0.4.0.
+
+### Fixed
+
+- **First Apply sometimes didn't move a dock (e.g. Browser) into position --
+  a second Apply click was needed.** `DockArranger.arrange()` called
+  `dock.setVisible(True)` before `addDockWidget()`, and moving a dock that's
+  already part of a tab group (Browser starts tabbed with Layers in a stock
+  QGIS install) doesn't always cleanly detach with `addDockWidget()` alone.
+  `core/docks.py` now explicitly `removeDockWidget()`s a dock before
+  re-adding it to its target area, and repositions before showing rather
+  than after, for every dock this plugin touches.
+- **"Reset to Default QGIS Workspace" didn't actually match QGIS's
+  defaults.** It forced every toolbar this plugin knows about visible --
+  but a real QGIS install only shows five by default (Attributes, Manage
+  Layers, Map Navigation, Project, Selection); everything else (Advanced
+  Digitizing, Digitizing, Snapping, Label, Database, Web, Raster, Vector,
+  Annotations, Plugins, Help, Mesh Digitizing, Shape Digitizing) is hidden
+  out of the box. Confirmed against a real QGIS 4 session's View > Toolbars
+  checkboxes. `core/constants.py` gains
+  `QGIS_DEFAULT_VISIBLE_TOOLBAR_NAMES` (the five) and
+  `QGIS_EDITING_TOOLBAR_NAMES` (the four Apply deliberately leaves alone,
+  which Reset still needs to know about); `ToolbarBuilder.show_default_toolbars()`
+  now shows the true-default five and hides every other known toolbar,
+  instead of showing all of them.
+
 ## [0.4.0] - 2026-08-12
 
 A multi-lens review of the 0.3.0 code (no real QGIS install involved, just

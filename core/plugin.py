@@ -341,7 +341,9 @@ class ArcGISLikeWorkspacePlugin:
         toolbars hidden or panels tucked away for your own reasons,
         Restore faithfully brings that back too. This action goes
         further: after undoing everything this plugin's Apply did, it
-        also forces every known QGIS default toolbar visible and ensures
+        also resets every known QGIS toolbar to its TRUE stock-install
+        visibility (most of them are hidden by default -- forcing all of
+        them on would be toolbar soup, not a default reset) and ensures
         the core Contents/Catalog panels are visible, regardless of what
         your prior layout had.
 
@@ -365,8 +367,8 @@ class ArcGISLikeWorkspacePlugin:
             catalog.setVisible(True)
 
         self._notify(
-            "Reset toolbars and core panels to QGIS defaults. Restart QGIS for a full "
-            "reset of default panel positions."
+            "Reset toolbar visibility and core panels to QGIS defaults. Restart QGIS "
+            "for a full reset of default panel positions."
         )
 
     def apply_shortcuts(self):
