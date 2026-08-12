@@ -4,6 +4,33 @@ All notable changes to this project are documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [0.2.1] - 2026-08-12
+
+### Fixed
+
+- **Crash**: Apply → Restore → Apply again could instantly crash QGIS.
+  Root cause: `core/layertree_menu.py` captured QGIS's native
+  `QgsLayerTreeView` menu provider, installed a wrapper via
+  `setMenuProvider()`, and tried to hand the native one back on Restore.
+  `setMenuProvider()` documents that it "takes ownership of the
+  instance" (stored in a `std::unique_ptr`) — every call deletes
+  whatever provider was installed before, so the "original" reference
+  was already dangling by the time Restore tried to reuse it. The actual
+  crash (a double-free) only surfaced on the *next* `setMenuProvider()`
+  call, i.e. the second Apply. Fixed by never attempting to preserve or
+  restore the native provider at all: the Contents right-click menu is
+  now built from scratch (via `QgsLayerTreeViewDefaultActions`) and
+  installed at most once per QGIS session, with an `active` flag toggled
+  on Apply/Restore instead of swapping providers. See the module
+  docstring in `core/layertree_menu.py` for the full explanation. One
+  unavoidable consequence: the Contents right-click menu no longer
+  reverts to QGIS's exact native menu after Restore within the same
+  session — see `QA_CHECKLIST.md`.
+- Fixed two Bandit security-scan findings (`try`/`except`/`pass` or
+  `continue`, rules B110/B112) flagged by plugins.qgis.org's mandatory
+  scan on first upload — both were intentional defensive skips, now
+  logged before continuing instead of silently swallowed.
+
 ## [0.2.0] - 2026-08-08
 
 ### Added

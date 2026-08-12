@@ -38,9 +38,14 @@ session. Run through this checklist there before trusting a release.
       snapping is enabled with a ~12px vertex+segment tolerance on the
       currently open project.
 - [ ] **Labeling toggle** — right-click a vector layer in Contents;
-      confirm a "Toggle Labels" entry appears alongside the normal
-      context menu (rename, zoom, remove, properties, etc.) and that it
-      actually toggles labels on/off.
+      confirm a reconstructed context menu appears (zoom to layer,
+      rename, remove, show feature count, then a separator, "Toggle
+      Labels", and "Layer Properties...") and that Toggle Labels and
+      Layer Properties actually work. This is a **deliberately
+      reconstructed** menu, not QGIS's exact native one — see the
+      "Contents right-click menu" note below for why, and don't be
+      alarmed that a few native-only entries (export, duplicate, set
+      CRS, etc.) aren't present.
 - [ ] **Identify Results / Log Messages docks** — confirm both appear
       renamed and repositioned (Identify Results tabbed on the right;
       Log Messages at the bottom, hidden until opened via View ▸
@@ -72,7 +77,12 @@ session. Run through this checklist there before trusting a release.
 - [ ] **Restore** after exercising every feature above — confirm
       everything reverts, not just the original four (toolbars/docks/
       stylesheet/window state).
-- [ ] **Re-apply immediately** after Restore — confirm idempotency: no
+- [ ] **Re-apply immediately after Restore — Apply → Restore → Apply
+      again, right-click a layer in Contents each time.** This exact
+      sequence used to instantly crash QGIS (a double-free in
+      `QgsLayerTreeView::setMenuProvider()` caused by trying to hand the
+      native menu provider back to QGIS on Restore — see the docstring
+      at the top of `core/layertree_menu.py`). Confirm no crash, and no
       duplicate docks, menu entries, ribbon groups, notifications-dock
       instances, or locator-filter registrations.
 - [ ] **Disable the plugin without clicking Restore first** — confirm
@@ -89,3 +99,16 @@ session. Run through this checklist there before trusting a release.
 - [ ] **Close and reopen QGIS** with the workspace applied — confirm a
       clean state on reopen (no leftover plugin toolbars/docks from a
       crashed or force-closed prior session).
+
+## Note: Contents right-click menu (permanent for the session)
+
+QGIS's `setMenuProvider()` API takes ownership of whatever provider it's
+given and deletes the previous one — there's no supported way to install
+a custom provider and later hand the *original native one* back. Because
+of that, once you click **Apply** for the first time in a QGIS session,
+the Contents right-click menu switches to this plugin's reconstructed
+menu (zoom, rename, remove, feature count, plus Toggle Labels/Layer
+Properties while applied) and **stays that way even after Restore**,
+until QGIS is restarted. This is an intentional, unavoidable tradeoff to
+eliminate the crash above, not a bug — see `core/layertree_menu.py`'s
+module docstring for the full explanation.

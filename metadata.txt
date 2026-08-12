@@ -2,7 +2,7 @@
 name=ArcGIS-like Workspace
 description=Applies an ArcGIS Pro-inspired workspace preset and behavior to QGIS using native QGIS actions, toolbars, dock widgets, settings, and Qt styling.
 about=This plugin rearranges QGIS into an ArcGIS Pro-inspired workspace and layers on genuine behavioral parity (contextual ribbon, Labeling toggle, Notifications, unified search, opt-in shortcuts) while keeping QGIS behavior native and reversible. It does not include Esri assets, branding, or proprietary UI code.
-version=0.2.0
+version=0.2.1
 qgisMinimumVersion=3.28
 qgisMaximumVersion=4.99
 author=Jan TvB
@@ -13,7 +13,16 @@ tags=ui,workspace,toolbar,layout,arcgis
 homepage=https://github.com/JanSolo99/arcgis-like-workspace
 repository=https://github.com/JanSolo99/arcgis-like-workspace
 tracker=https://github.com/JanSolo99/arcgis-like-workspace/issues
-changelog=0.2.0
+changelog=0.2.1
+    - Fixed a crash: applying the workspace, restoring, then applying
+      again could instantly crash QGIS (a double-free in
+      QgsLayerTreeView's menu-provider handling). The Contents
+      right-click menu is now built fresh instead of trying to preserve
+      and restore QGIS's native one, which the Qt API doesn't safely
+      support.
+    - Fixed two Bandit security-scan findings (silent try/except/pass or
+      continue) flagged on first upload to plugins.qgis.org.
+    0.2.0
     - Restructured into an internal core/ package.
     - Added native-setting toggles: docked attribute tables, default snapping.
     - Added a one-click Labeling toggle to the Contents right-click menu.

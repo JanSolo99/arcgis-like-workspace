@@ -87,6 +87,14 @@ because it persists directly to QGIS's own settings the moment it's
 applied — see the note in `core/shortcuts.py` — but disabling the plugin
 will still restore it automatically as a safety net if you forget.
 
+**One exception to "fully reversible":** the Contents right-click menu
+switches to this plugin's own reconstructed menu (zoom, rename, remove,
+feature count, plus Toggle Labels/Layer Properties while applied) the
+first time you click Apply, and stays that way for the rest of the QGIS
+session even after Restore — QGIS's `setMenuProvider()` API doesn't
+support safely handing the original native menu back. See the note in
+`core/layertree_menu.py` for why.
+
 ## Compatibility
 
 - **QGIS 3.28 – 4.x**
