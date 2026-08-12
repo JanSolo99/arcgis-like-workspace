@@ -75,11 +75,29 @@ class ActionGroup:
     """A labelled group of toolbar widgets, retained so callers can later
     show/hide it (e.g. for contextual visibility based on layer type)."""
 
-    def __init__(self, label: str, label_widget: QLabel, toolbar: QToolBar, actions: List[QAction]):
+    def __init__(
+        self,
+        label: str,
+        label_widget: QLabel,
+        toolbar: QToolBar,
+        actions: List[QAction],
+        separator: Optional[QAction] = None,
+    ):
         self.label = label
         self.label_widget = label_widget
         self.toolbar = toolbar
         self.actions = actions
+        #: This group's own leading separator, or None for the first group
+        #: in the toolbar (nothing precedes it to separate from). Unlike the
+        #: native action QActions in `actions`, this QAction is created by
+        #: and belongs solely to this group -- it is never shared with
+        #: another toolbar or menu -- so toggling its widget's visibility
+        #: here cannot hide it anywhere else. Tracking it keeps contiguous
+        #: hidden groups (e.g. Edit + Selection) from leaving orphaned
+        #: separators behind: each group takes its own leading separator
+        #: with it, and only the boundary separator of the next *visible*
+        #: group remains on screen.
+        self.separator = separator
 
     def set_visible(self, visible: bool):
         # Toggle visibility of this toolbar's *widget* for each action, not
@@ -92,6 +110,10 @@ class ActionGroup:
             widget = self.toolbar.widgetForAction(action)
             if widget is not None:
                 widget.setVisible(visible)
+        if self.separator is not None:
+            separator_widget = self.toolbar.widgetForAction(self.separator)
+            if separator_widget is not None:
+                separator_widget.setVisible(visible)
 
 
 class ToolbarBuilder:
@@ -325,8 +347,10 @@ class ToolbarBuilder:
         if not actions:
             return
 
-        if toolbar.actions():
-            toolbar.addSeparator()
+        # addSeparator() returns the QAction it just created -- capture it
+        # so ActionGroup can hide/show this group's leading separator along
+        # with its label and action widgets (see ActionGroup.separator).
+        separator = toolbar.addSeparator() if toolbar.actions() else None
 
         group_label = QLabel(label, self.window)
         group_label.setObjectName(f"{OBJECT_PREFIX}GroupLabel")
@@ -335,7 +359,7 @@ class ToolbarBuilder:
         for action in actions:
             toolbar.addAction(action)
 
-        self.action_groups[label] = ActionGroup(label, group_label, toolbar, actions)
+        self.action_groups[label] = ActionGroup(label, group_label, toolbar, actions, separator)
 
     def _new_toolbar(self, title: str, suffix: str, icon_size: QSize) -> QToolBar:
         """Create and register a new, non-movable toolbar."""

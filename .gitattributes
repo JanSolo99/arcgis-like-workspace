@@ -1,0 +1,8 @@
+# Keep the test harness out of git-archive-built plugin zips (the
+# packaging method plugins.qgis.org and manual releases both use). The
+# harness is dev-only tooling -- see the README's Development section --
+# and has no reason to ship inside the installed plugin.
+tests/ export-ignore
+
+# This file itself is dev/repo metadata, not part of the plugin.
+.gitattributes export-ignore

@@ -112,14 +112,24 @@ class NotificationsDock:
         task = QgsApplication.taskManager().task(task_id)
         if task is None:
             return
-        description = self._task_description(task)
-        self._add_entry(f"Task started: {description}")
-        self._connections.connect(
-            task.taskCompleted, lambda t=task: self._add_entry(f"Task completed: {self._task_description(t)}")
-        )
-        self._connections.connect(
-            task.taskTerminated, lambda t=task: self._add_entry(f"Task failed: {self._task_description(t)}")
-        )
+        # Deliberately NOT routed through self._connections (ConnectionTracker):
+        # that tracker exists for the two singleton connections above, whose
+        # emitters (QgsMessageLog, QgsTaskManager) outlive this dock and so
+        # need an explicit disconnect in restore(). A per-task connection is
+        # the opposite case -- the task is short-lived and its signals die
+        # with it, so tracking it there would only ever grow the list, never
+        # shrink it, across a long session running many tasks. Connecting
+        # directly lets Qt drop the connection itself once the QgsTask C++
+        # object is destroyed, no bookkeeping required.
+        #
+        # The description is captured as a plain string *now*, not read off
+        # `task` inside the callback, so the lambda closes over `desc`
+        # instead of `task` -- nothing here keeps the QgsTask wrapper alive
+        # after the task finishes and QgsTaskManager releases it.
+        desc = self._task_description(task)
+        self._add_entry(f"Task started: {desc}")
+        task.taskCompleted.connect(lambda: self._add_entry(f"Task completed: {desc}"))
+        task.taskTerminated.connect(lambda: self._add_entry(f"Task failed: {desc}"))
 
     @staticmethod
     def _task_description(task) -> str:

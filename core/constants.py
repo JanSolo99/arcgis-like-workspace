@@ -28,21 +28,23 @@ class Keys:
     WINDOW_GEOMETRY = "windowGeometry"
     DOCK_ATTRIBUTE_TABLE_ORIGINAL = "dockAttributeTableOriginal"
 
-    #: Absolute (not relative to SETTINGS_PREFIX) -- see SHORTCUTS_SETTINGS_PREFIX.
-    SHORTCUTS_HAS_SAVED_STATE = f"{SHORTCUTS_SETTINGS_PREFIX}/hasSavedState"
-
 
 # Standard QGIS toolbar object names that this plugin may hide. Only toolbars
 # whose object names are in this known-default set are hidden -- plugin and
 # third-party toolbars are always left untouched.
+#
+# Deliberately EXCLUDED: mDigitizeToolBar, mAdvancedDigitizeToolBar,
+# mSnappingToolBar, mLabelToolBar. The replacement ribbon/tab "Edit" group
+# only exposes five actions (toggle editing, save edits, add feature, vertex
+# tool, delete selected) -- nowhere near the editing capability those native
+# toolbars provide, and mSnappingToolBar is the only UI for adjusting
+# snapping settings at all. Hiding them would strip capability the preset
+# does not replace, so they stay visible no matter what this set is used for.
 QGIS_DEFAULT_TOOLBAR_NAMES: set = {
     "mFileToolBar",
     "mLayerToolBar",
     "mMapNavToolBar",
     "mAttributesToolBar",
-    "mDigitizeToolBar",
-    "mAdvancedDigitizeToolBar",
-    "mLabelToolBar",
     "mVectorToolBar",
     "mRasterToolBar",
     "mWebToolBar",
@@ -50,7 +52,6 @@ QGIS_DEFAULT_TOOLBAR_NAMES: set = {
     "mHelpToolBar",
     "mPluginToolBar",
     "mSelectionToolBar",
-    "mSnappingToolBar",
     "mProjectToolBar",
     "mAnnotationToolBar",
     "mDataStreamingToolBar",

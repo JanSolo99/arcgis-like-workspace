@@ -2,20 +2,33 @@
 
 Applies an ArcGIS Pro-inspired layout using native QGIS toolbars, dock
 widgets, and Qt stylesheets, then layers on genuine behavioral parity
-features (native-setting toggles, a contextual ribbon, a Labeling toggle, a
-Notifications dock, a unified locator filter, and an opt-in keyboard-shortcut
-remap). All changes are reversible via the Restore action or by disabling
-the plugin.
+features (native-setting toggles, a contextual ribbon, a Labeling toggle
+added additively to the layer tree's native Contents menu -- see
+layertree_menu.py -- a Notifications dock, a unified locator filter, and
+an opt-in keyboard-shortcut remap). All changes are reversible via the
+Restore action or by disabling the plugin, and an opt-in "Apply at QGIS
+Startup" preference can re-apply the workspace automatically on the next
+launch instead of every session starting back at plain QGIS.
+
+Also installs a small logging.Handler (see _QgisMessageLogHandler below)
+that bridges this package's stdlib logging -- used throughout by every
+feature module's defensive `logger.exception(...)`/`logger.warning(...)`
+calls -- into QGIS's own Message Log panel. Without it, QGIS never
+surfaces stdlib logging output anywhere: every "log and continue" is
+invisible in the running application, which is how failures in inert
+features have shipped unnoticed before.
 
 Supports QGIS 3.28+ on both Qt 5 and Qt 6.
 """
 
-from typing import Callable, List, Optional
+import logging
+from typing import Callable, List, Optional, Tuple
 
-from qgis.PyQt.QtCore import QSettings
+from qgis.core import QgsApplication
+from qgis.PyQt.QtCore import QSettings, QTimer
 from qgis.PyQt.QtWidgets import QAction, QMessageBox
 
-from .compat import QGIS_INFO, QGIS_WARNING
+from .compat import QGIS_CRITICAL, QGIS_INFO, QGIS_WARNING
 from .constants import Keys, MENU_NAME, SETTINGS_PREFIX
 from .contextual_ribbon import ContextualRibbon
 from .docks import DockArranger
@@ -27,6 +40,64 @@ from .settings_toggles import SettingsToggles
 from .shortcuts import ShortcutRemap
 from .stylesheet import StylesheetManager
 from .toolbars import ToolbarBuilder, standard_icon
+
+logger = logging.getLogger(__name__)
+
+#: QSettings key for the opt-in "Apply at QGIS Startup" preference.
+#: Deliberately a standalone key OUTSIDE constants.SETTINGS_PREFIX (and
+#: not registered in constants.Keys, which is relative to that prefix --
+#: see constants.py). restore_layout() wipes the whole SETTINGS_PREFIX
+#: branch wholesale (`self.settings.remove(SETTINGS_PREFIX)`) every time
+#: the workspace is restored; if this preference lived under that prefix,
+#: enabling "Apply at QGIS Startup" would silently un-set itself the very
+#: first time the user clicked Restore, defeating the point of a startup
+#: preference. Same reasoning constants.py documents for
+#: SHORTCUTS_SETTINGS_PREFIX.
+APPLY_AT_STARTUP_SETTINGS_KEY = "arcgis_like_workspace_prefs/applyAtStartup"
+
+
+class _QgisMessageLogHandler(logging.Handler):
+    """Bridges stdlib logging records into QGIS's Message Log panel.
+
+    QGIS does not install any handler on the root logger or on this
+    package's logger -- stdlib `logging` and QGIS's own C++-side message
+    log are two separate systems that nothing connects by default. This
+    handler is the connection: attached to the package logger in
+    initGui() (see ArcGISLikeWorkspacePlugin.initGui()) and removed in
+    unload(), it forwards WARNING-and-above records to
+    QgsApplication.messageLog().logMessage(), verified via
+    https://qgis.org/pyqgis/master/core/QgsMessageLog.html --
+    `logMessage(message, tag='', level=Qgis.MessageLevel.Warning, ...)`.
+    """
+
+    def __init__(self, level=logging.WARNING):
+        super().__init__(level=level)
+        # Default Formatter() renders bare "%(message)s" -- since many
+        # `logger.exception(...)` calls across this package already prefix
+        # their own message with "ArcGIS-like Workspace: ...", the tag
+        # passed to logMessage() below covers the plugin identity, so this
+        # only adds the originating module and level, useful for telling
+        # apart which feature module logged an entry once several show up
+        # in the same QGIS Message Log tag. Formatter.format() appends any
+        # exception traceback (record.exc_info, set by logger.exception())
+        # after the format string regardless of its content, so tracebacks
+        # still come through in full.
+        self.setFormatter(logging.Formatter("%(name)s [%(levelname)s] %(message)s"))
+
+    def emit(self, record: logging.LogRecord):
+        # A logging handler must never raise out of emit() -- the stdlib
+        # docs are explicit that exceptions here should not propagate.
+        # Guarded with the standard self.handleError() escape hatch
+        # (a no-op unless logging.raiseExceptions is set and stderr is
+        # available) rather than a bare except, so a broken handler still
+        # fails the documented, safe way instead of silently swallowing
+        # everything including bugs in this handler itself.
+        try:
+            message = self.format(record)
+            level = QGIS_CRITICAL if record.levelno >= logging.ERROR else QGIS_WARNING
+            QgsApplication.messageLog().logMessage(message, "ArcGIS-like Workspace", level)
+        except Exception:
+            self.handleError(record)
 
 
 class ArcGISLikeWorkspacePlugin:
@@ -91,10 +162,27 @@ class ArcGISLikeWorkspacePlugin:
         self.about_action: Optional[QAction] = None
         self.apply_shortcuts_action: Optional[QAction] = None
         self.restore_shortcuts_action: Optional[QAction] = None
+        self.apply_at_startup_action: Optional[QAction] = None
         self.menu_actions: List[QAction] = []
+
+        #: Set only while a one-shot handler is wired to auto-apply the
+        #: workspace once QGIS finishes starting up (see
+        #: _connect_startup_apply()/_on_initialization_completed()); a
+        #: (signal, slot) pair so unload() can disconnect it if it never
+        #: fired. None otherwise.
+        self._startup_connection: Optional[Tuple[object, Callable]] = None
+
+        #: The stdlib-logging-to-QGIS-message-log bridge (see
+        #: _QgisMessageLogHandler above), attached to _plugin_logger in
+        #: initGui() and removed in unload(). Both None until initGui()
+        #: runs.
+        self._log_handler: Optional[_QgisMessageLogHandler] = None
+        self._plugin_logger: Optional[logging.Logger] = None
 
     def initGui(self):
         """Create menu entries and toolbar icon -- called by QGIS on load."""
+        self._attach_log_handler()
+
         self.apply_action = self._make_plugin_action(
             "Apply ArcGIS-like Workspace",
             self.apply_layout,
@@ -126,6 +214,17 @@ class ArcGISLikeWorkspacePlugin:
             "SP_BrowserReload",
         )
 
+        self.apply_at_startup_action = QAction(
+            standard_icon("SP_DialogYesButton"),
+            "Apply at QGIS Startup",
+            self.window,
+        )
+        self.apply_at_startup_action.setCheckable(True)
+        self.apply_at_startup_action.setChecked(
+            self.settings.value(APPLY_AT_STARTUP_SETTINGS_KEY, False, type=bool)
+        )
+        self.apply_at_startup_action.toggled.connect(self._set_apply_at_startup)
+
         self.menu_actions = [
             self.apply_action,
             self.restore_action,
@@ -133,12 +232,16 @@ class ArcGISLikeWorkspacePlugin:
             self.about_action,
             self.apply_shortcuts_action,
             self.restore_shortcuts_action,
+            self.apply_at_startup_action,
         ]
 
         for action in self.menu_actions:
             self.iface.addPluginToMenu(MENU_NAME, action)
 
         self.iface.addToolBarIcon(self.apply_action)
+
+        if self.apply_at_startup_action.isChecked():
+            self._connect_startup_apply()
 
     def unload(self):
         """Remove menu entries, toolbar icon, and restore workspace -- called by QGIS on unload."""
@@ -147,6 +250,29 @@ class ArcGISLikeWorkspacePlugin:
 
         if self.apply_action is not None:
             self.iface.removeToolBarIcon(self.apply_action)
+
+        # The menu/toolbar calls above only detach these QActions from
+        # their menus/toolbars -- they stay alive, parented to the main
+        # window (long-lived), with a live `triggered`/`toggled`
+        # connection back into this plugin instance's bound methods. Left
+        # that way, each one pins the whole dead plugin instance in memory
+        # across a Plugin Reloader cycle (the same hazard locator_filter.py
+        # documents for its find_action). deleteLater() breaks that.
+        for action in self.menu_actions:
+            if action is not None:
+                action.deleteLater()
+        self.menu_actions = []
+
+        if self._startup_connection is not None:
+            signal, slot = self._startup_connection
+            try:
+                signal.disconnect(slot)
+            except (TypeError, RuntimeError):
+                # Already disconnected (it fired and self-disconnected --
+                # see _on_initialization_completed()), or the underlying
+                # C++ object is already gone -- safe to ignore either way.
+                pass
+            self._startup_connection = None
 
         has_saved_state = self.settings.value(self._key(Keys.HAS_SAVED_STATE), False, type=bool)
         if has_saved_state:
@@ -164,6 +290,8 @@ class ArcGISLikeWorkspacePlugin:
         # would stick indefinitely.
         if self.shortcut_remap.has_saved_state():
             self.shortcut_remap.restore()
+
+        self._detach_log_handler()
 
     def apply_layout(self):
         """Apply the ArcGIS-like workspace: save current state, create ribbon + tab toolbars,
@@ -278,9 +406,120 @@ class ArcGISLikeWorkspacePlugin:
                 "Workspace goes further and forces QGIS's own default toolbars/"
                 "panels visible. It does not copy Esri icons, branding, or "
                 "proprietary ArcGIS UI code, and it does not change QGIS's "
-                "underlying project model."
+                "underlying project model.\n\n"
+                "Check \"Apply at QGIS Startup\" in this menu to have the "
+                "workspace re-applied automatically the next time QGIS launches, "
+                "instead of applying it by hand every session."
             ),
         )
+
+    def _connect_startup_apply(self):
+        """Wire a one-shot handler that applies the workspace once QGIS
+        finishes its own startup sequence.
+
+        Only ever called from initGui() when "Apply at QGIS Startup" is
+        already checked (persisted from a previous session). If initGui()
+        instead runs mid-session -- the user enabling this plugin by hand
+        via the Plugin Manager well after QGIS's own startup already
+        completed -- iface.initializationCompleted already fired earlier
+        in this process and connecting to it now is a safe no-op: Qt
+        signals never replay a past emission to a newly-connected slot, so
+        the handler below simply never runs and the workspace is not
+        auto-applied. That is exactly the desired behavior (the user can
+        still click Apply by hand) and needs no extra mid-session
+        detection code -- it falls out of ordinary Qt signal semantics.
+        """
+        signal = getattr(self.iface, "initializationCompleted", None)
+        if signal is not None:
+            try:
+                signal.connect(self._on_initialization_completed)
+            except Exception:
+                logger.exception(
+                    "ArcGIS-like Workspace: could not connect to iface.initializationCompleted"
+                )
+            else:
+                self._startup_connection = (signal, self._on_initialization_completed)
+                return
+
+        # Fallback for a hypothetical QGIS build lacking
+        # initializationCompleted -- verified present on QgisInterface
+        # since at least the release-3_28 branch (this plugin's floor;
+        # python/gui/auto_generated/qgisinterface.sip.in on
+        # https://github.com/qgis/QGIS), so in practice this branch should
+        # be unreachable and exists only per the compat-helper pattern
+        # (compat.py) for forward safety. Unlike the signal path above, a
+        # bare QTimer.singleShot cannot tell "QGIS is still starting up"
+        # apart from "the plugin was just enabled mid-session", and its
+        # static form gives no handle to cancel from unload() -- accepted
+        # here as a best-effort fallback only, not an equivalent guarantee.
+        QTimer.singleShot(0, self.apply_layout)
+
+    def _on_initialization_completed(self):
+        """One-shot handler for iface.initializationCompleted -- see
+        _connect_startup_apply()."""
+        if self._startup_connection is not None:
+            signal, slot = self._startup_connection
+            try:
+                signal.disconnect(slot)
+            except (TypeError, RuntimeError):
+                pass
+            self._startup_connection = None
+        self.apply_layout()
+
+    def _set_apply_at_startup(self, checked: bool):
+        """Persist the "Apply at QGIS Startup" preference (toggled handler).
+
+        Deliberately does not connect/disconnect _connect_startup_apply()
+        here -- the signal is only ever wired once, from initGui(), for
+        the reasons documented there. Toggling this action mid-session
+        only affects what happens on the *next* QGIS launch.
+        """
+        self.settings.setValue(APPLY_AT_STARTUP_SETTINGS_KEY, bool(checked))
+
+    def _attach_log_handler(self):
+        """Bridge this package's stdlib logging into QGIS's Message Log --
+        see _QgisMessageLogHandler and the module docstring."""
+        if self._log_handler is not None:
+            return
+        try:
+            # __name__ here is "<install_dir_name>.core.plugin" -- the
+            # package containing this core/ subpackage is the first
+            # dot-segment. Attaching to that package logger (rather than
+            # just this module's own logger) means every feature module's
+            # `logging.getLogger(__name__)` -- all children of it -- routes
+            # here too, since child loggers propagate to ancestor handlers
+            # by default.
+            package_name = __name__.rsplit(".", 2)[0]
+            self._plugin_logger = logging.getLogger(package_name)
+            # A previous plugin instance that never unloaded cleanly (crash,
+            # or a reload path that skipped unload()) may have left its own
+            # bridge handler on this shared package logger -- remove any
+            # stale ones first, or every log line would surface twice in
+            # QGIS's Message Log.
+            # Matched by class NAME, not isinstance: after a plugin reload
+            # this module is re-imported, so a stale handler is an instance
+            # of the previous import's class object, which isinstance
+            # against the current class would miss.
+            for handler in list(self._plugin_logger.handlers):
+                if type(handler).__name__ == "_QgisMessageLogHandler":
+                    self._plugin_logger.removeHandler(handler)
+            self._log_handler = _QgisMessageLogHandler(logging.WARNING)
+            self._plugin_logger.addHandler(self._log_handler)
+        except Exception:
+            # Must never block initGui() -- worst case, logging just stays
+            # invisible in QGIS the way it always has.
+            logger.exception("ArcGIS-like Workspace: could not attach the QGIS message-log bridge")
+            self._log_handler = None
+            self._plugin_logger = None
+
+    def _detach_log_handler(self):
+        if self._log_handler is not None and self._plugin_logger is not None:
+            try:
+                self._plugin_logger.removeHandler(self._log_handler)
+            except Exception:
+                logger.exception("ArcGIS-like Workspace: could not detach the QGIS message-log bridge")
+        self._log_handler = None
+        self._plugin_logger = None
 
     def _save_original_window_state_once(self):
         """Save the current main-window state and geometry (idempotent)."""

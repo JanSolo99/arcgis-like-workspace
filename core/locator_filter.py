@@ -8,13 +8,59 @@ this filter is purely additive alongside the existing built-in ones.
 import logging
 
 from qgis.core import QgsApplication, QgsLocatorFilter, QgsLocatorResult, QgsProject
-from qgis.gui import QgsGui
+from qgis.gui import QgsLocatorWidget
 from qgis.PyQt.QtWidgets import QAction, QDockWidget
 
 from .compat import qgis_enum
 from .toolbars import standard_icon
 
 logger = logging.getLogger(__name__)
+
+# ArcGIS refugees search for the tool they know by its Esri name, not its
+# QGIS Processing name -- "Erase" has no hit against "Difference" otherwise.
+# Keys are lowercase ArcGIS tool names; values are substrings matched
+# against QGIS algorithm displayName()s (see fetchResults() below). Curated
+# by hand against docs.qgis.org's processing algorithm reference, not
+# exhaustive -- extend as more ArcGIS-to-QGIS gaps are reported.
+ESRI_TOOL_ALIASES = {
+    "erase": "difference",
+    "spatial join": "join attributes by location",
+    "feature to point": "centroids",
+    "add field": "add field to attributes table",
+    "calculate field": "field calculator",
+    "project": "reproject layer",
+    "merge": "merge vector layers",
+    "append": "merge vector layers",
+    "intersect": "intersection",
+    "dissolve": "dissolve",
+    "clip": "clip",
+    "buffer": "buffer",
+    "union": "union",
+    "select by location": "select by location",
+    "select by attributes": "select by expression",
+    "xy table to point": "create points layer from table",
+    "table to table": "export to spreadsheet",
+    "summary statistics": "statistics by categories",
+    "near": "distance to nearest hub",
+    "points to line": "points to path",
+    "feature class to feature class": "convert format",
+    "raster to polygon": "polygonize",
+    "polygon to raster": "rasterize",
+    "extract by mask": "clip raster by mask layer",
+    "mosaic": "merge",
+}
+
+
+def _format_esri_alias_name(esri_name: str) -> str:
+    """Title-case an ESRI_TOOL_ALIASES key for display, e.g. in a result
+    description. Good enough for a locator hint; not a general title-caser
+    (the one acronym this plugin's alias table contains, "xy", is fixed up
+    by hand rather than pulling in a full title-casing dependency).
+    """
+    label = esri_name.title()
+    if label.startswith("Xy "):
+        label = "XY " + label[3:]
+    return label
 
 
 class ArcGISWorkspaceLocatorFilter(QgsLocatorFilter):
@@ -52,13 +98,40 @@ class ArcGISWorkspaceLocatorFilter(QgsLocatorFilter):
             logger.exception("ArcGIS-like Workspace: locator layer search failed")
 
         try:
-            for algorithm in QgsApplication.processingRegistry().algorithms():
+            algorithms = QgsApplication.processingRegistry().algorithms()
+            emitted_algorithm_ids = set()
+
+            for algorithm in algorithms:
                 if feedback.isCanceled():
                     return
                 if needle in algorithm.displayName().lower():
+                    emitted_algorithm_ids.add(algorithm.id())
                     self._emit(
                         algorithm.displayName(),
                         "Geoprocessing Tool",
+                        {"type": "algorithm", "id": algorithm.id()},
+                    )
+
+            # ArcGIS-name aliases, e.g. typing "erase" finds QGIS's
+            # "Difference". Skipped per-algorithm if the plain-name pass
+            # above already emitted it, so a search that matches both the
+            # ArcGIS alias and the QGIS name (e.g. "clip") doesn't double up.
+            for esri_name, qgis_term in ESRI_TOOL_ALIASES.items():
+                if needle not in esri_name:
+                    continue
+                if feedback.isCanceled():
+                    return
+                for algorithm in algorithms:
+                    if feedback.isCanceled():
+                        return
+                    if algorithm.id() in emitted_algorithm_ids:
+                        continue
+                    if qgis_term not in algorithm.displayName().lower():
+                        continue
+                    emitted_algorithm_ids.add(algorithm.id())
+                    self._emit(
+                        algorithm.displayName(),
+                        f"Geoprocessing Tool (ArcGIS: {_format_esri_alias_name(esri_name)})",
                         {"type": "algorithm", "id": algorithm.id()},
                     )
         except Exception:
@@ -97,9 +170,12 @@ class ArcGISWorkspaceLocatorFilter(QgsLocatorFilter):
             return
         try:
             self.iface.setActiveLayer(layer)
-            canvas = self.iface.mapCanvas()
-            canvas.setExtent(layer.extent())
-            canvas.refresh()
+            # layer.extent() is in the layer's own CRS; canvas.setExtent()
+            # expects canvas-CRS coordinates, so feeding it the raw layer
+            # extent zooms to nonsense whenever the layer and canvas CRS
+            # differ. zoomToActiveLayer() does the on-the-fly transform.
+            self.iface.zoomToActiveLayer()
+            self.iface.mapCanvas().refresh()
         except Exception:
             logger.exception("ArcGIS-like Workspace: could not activate layer from locator result")
 
@@ -193,7 +269,17 @@ class LocatorFeature:
             toolbar.addAction(self._find_action)
 
     def _focus_locator(self):
+        # QgsGui.instance().locatorWidget() does not exist on any QGIS
+        # version -- the locator widget lives on QgisApp (the main window),
+        # not on the QgsGui singleton. It's not exposed via QgisInterface
+        # either, so find it the same way the rest of this plugin locates
+        # native chrome that has no interface accessor (see toolbars.py,
+        # docks.py): search the main window's children for it.
         try:
-            QgsGui.instance().locatorWidget().search("")
+            widget = self.iface.mainWindow().findChild(QgsLocatorWidget)
+            if widget is not None:
+                widget.search("")
+            else:
+                logger.warning("ArcGIS-like Workspace: could not find the native locator widget")
         except Exception:
             logger.exception("ArcGIS-like Workspace: could not focus the native locator bar")

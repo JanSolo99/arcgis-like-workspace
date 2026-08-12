@@ -2,11 +2,14 @@
 Symbology, and Identify Results (right, tabbed); Log Messages (bottom,
 hidden by default). All native QGIS docks -- nothing custom-built."""
 
+import logging
 from typing import List, Optional
 
 from qgis.PyQt.QtWidgets import QDockWidget
 
 from .compat import BOTTOM_DOCK_WIDGET_AREA, LEFT_DOCK_WIDGET_AREA, RIGHT_DOCK_WIDGET_AREA
+
+logger = logging.getLogger(__name__)
 
 
 class DockArranger:
@@ -86,7 +89,22 @@ class DockArranger:
         dock.setWindowTitle(title)
 
     def restore_titles(self):
-        """Restore original dock widget titles."""
-        for dock, title in self.renamed_docks.values():
-            dock.setWindowTitle(title)
-        self.renamed_docks = {}
+        """Restore original dock widget titles.
+
+        Each dock is a native QGIS widget this plugin doesn't own the
+        lifetime of -- e.g. the Processing dock disappears if that plugin
+        gets disabled mid-session -- so the underlying C++ object can be
+        gone by the time Restore runs. setWindowTitle() on a deleted dock
+        raises RuntimeError; guard per-dock so one dead dock can't abort
+        the loop and strand the rest un-restored. renamed_docks is cleared
+        in `finally` regardless, otherwise a single bad entry would keep
+        failing (or keep getting skipped) on every subsequent Restore.
+        """
+        try:
+            for dock, title in self.renamed_docks.values():
+                try:
+                    dock.setWindowTitle(title)
+                except RuntimeError:
+                    logger.debug("ArcGIS-like Workspace: dock already deleted, skipping title restore")
+        finally:
+            self.renamed_docks = {}

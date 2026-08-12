@@ -30,14 +30,23 @@ or proprietary UI code.
   configuration** (vertex + segment, ~12px tolerance) for the current
   project — both flip an existing native QGIS setting rather than adding
   new UI.
-- **One-click Labeling toggle** on the Contents right-click menu.
+- **One-click Labeling toggle** on the Contents right-click menu, added
+  additively via QGIS's supported `addCustomActionForLayerType()` API —
+  the rest of the native menu (export, duplicate, set CRS, etc.) is
+  untouched.
 - **Notifications dock** — a bell-style toggle showing an unread count,
   aggregating background task events and warning/critical log messages.
 - **Unified locator** — search layers, geoprocessing tools, and bookmarks
   in one query via QGIS's native locator bar (`Ctrl+K`), plus a "Find"
-  button that focuses it.
+  button that focuses it. Also recognizes a handful of ArcGIS Pro tool
+  names as aliases for their QGIS Processing equivalent (e.g. typing
+  "Erase" finds Difference) — see Usage below.
 - **Opt-in keyboard shortcut remap** toward ArcGIS Pro conventions, kept
   separate from the main preset and collision-safe (see Usage below).
+- **Apply at QGIS Startup** — an opt-in checkable menu option that
+  re-applies the workspace preset automatically once QGIS finishes
+  starting up, instead of every session beginning at plain QGIS (see
+  Usage below).
 
 **Reversibility**
 
@@ -76,10 +85,11 @@ itself to still be QGIS's.
 | **Reset to Default QGIS Workspace**       | "Reset to Default" button on the tab toolbar, or the plugin menu — a stronger reset than Restore, see below |
 | **About**                                 | **Plugins → ArcGIS-like Workspace → About This Workspace**         |
 | **Notifications**                         | Bell button on the tab toolbar (shows an unread count when hidden) |
-| **Find (layers, tools, bookmarks)**       | "Find" button on the tab toolbar, or QGIS's native `Ctrl+K`        |
+| **Find (layers, tools, bookmarks, ArcGIS tool names)** | "Find" button on the tab toolbar, or QGIS's native `Ctrl+K` |
 | **Toggle Labels**                         | Right-click a layer in Contents                                    |
 | **Apply ArcGIS-like Shortcuts (opt-in)**  | **Plugins → ArcGIS-like Workspace** menu — separate from the main preset, see below |
 | **Restore Original Shortcuts**            | **Plugins → ArcGIS-like Workspace** menu                           |
+| **Apply at QGIS Startup (opt-in)**        | Checkable entry in **Plugins → ArcGIS-like Workspace** menu — see below |
 
 The main workspace preset is automatically restored when the plugin is
 disabled or QGIS is closed (provided it was previously applied in that
@@ -87,6 +97,21 @@ session). The opt-in shortcut remap has its own explicit Restore action
 because it persists directly to QGIS's own settings the moment it's
 applied — see the note in `core/shortcuts.py` — but disabling the plugin
 will still restore it automatically as a safety net if you forget.
+
+**ArcGIS tool-name aliases in Find:** typing an Esri Processing-tool name
+into Find/`Ctrl+K` also matches its QGIS equivalent, labelled "Geoprocessing
+Tool (ArcGIS: …)" in the results — e.g. "Erase" finds Difference, "Spatial
+Join" finds Join Attributes by Location, "Feature to Point" finds Centroids,
+and "Calculate Field" finds Field Calculator. The full curated list is
+`ESRI_TOOL_ALIASES` in `core/locator_filter.py`; it's a hand-picked,
+non-exhaustive set, not a full ArcGIS-to-QGIS tool mapping.
+
+**Apply at QGIS Startup:** check this once and the workspace preset applies
+itself automatically the next time (and every time after that) QGIS
+finishes starting up, instead of needing a manual Apply click every
+session. It's stored outside the settings branch an ordinary Restore
+wipes, so restoring the workspace mid-session doesn't silently un-check
+it — uncheck it yourself, from the same menu, to turn auto-apply back off.
 
 **Restore vs. Reset to Default:** Restore returns QGIS to *your* layout
 as it was right before you clicked Apply — if you'd already hidden some
@@ -99,23 +124,43 @@ visible, regardless of what your layout looked like before. Panel
 hardcoded at application startup and isn't something a plugin can replay
 on demand, so a pixel-perfect factory reset still needs a QGIS restart.
 
-**One exception to "fully reversible":** the Contents right-click menu
-switches to this plugin's own reconstructed menu (zoom, rename, remove,
-feature count, plus Toggle Labels/Layer Properties while applied) the
-first time you click Apply, and stays that way for the rest of the QGIS
-session even after Restore — QGIS's `setMenuProvider()` API doesn't
-support safely handing the original native menu back. See the note in
-`core/layertree_menu.py` for why.
+The Contents right-click menu itself is QGIS's real, native menu, untouched
+— this plugin only adds one "Toggle Labels" entry to it (via
+`QgisInterface.addCustomActionForLayerType()`) and removes exactly that
+entry on Restore. Earlier releases (0.2.1–0.3.0) carried a caveat here
+about the menu staying "reconstructed" after Restore; that was a symptom
+of an unsafe `setMenuProvider()`-based approach that has since been
+replaced entirely — see `CHANGELOG.md`'s 0.4.0 entry and the module
+docstring in `core/layertree_menu.py`.
 
 ## Compatibility
 
 - **QGIS 3.28 – 4.x**
 - **Qt 5 and Qt 6** (uses runtime enum lookup to avoid binding-specific imports)
-- The 0.2.0 behavioral features use additional PyQGIS surface beyond 0.1.0's
-  toolbar/dock/stylesheet APIs — `QgsLocatorFilter`, `QgsShortcutsManager`,
-  `QgsLayerTreeViewMenuProvider`, `QgsTaskManager`, `QgsSnappingConfig` —
-  checked against the `qgisMinimumVersion=3.28` floor, but not yet verified
-  against a real QGIS install in every point release; see `QA_CHECKLIST.md`.
+- The 0.2.0+ behavioral features use additional PyQGIS surface beyond
+  0.1.0's toolbar/dock/stylesheet APIs — `QgsLocatorFilter`,
+  `QgsShortcutsManager`, `QgisInterface.addCustomActionForLayerType()`,
+  `QgsTaskManager`, `QgsSnappingConfig` — checked against the
+  `qgisMinimumVersion=3.28` floor and, where version-sensitive, resolved at
+  runtime via the compat-candidate helpers in `core/compat.py` rather than
+  a single hardcoded spelling. Still not verified against a real QGIS
+  install in every point release; see `QA_CHECKLIST.md`.
+
+## Development / Testing
+
+`tests/` contains a pytest harness built around a fake `qgis` module, so
+the plugin's core logic can be exercised without a real QGIS install:
+
+```
+python -m pytest tests/
+```
+
+It's a unit-level safety net, not a substitute for `QA_CHECKLIST.md` — it
+can't catch a wrong PyQGIS call shape that the fakes don't model (exactly
+the class of bug behind three of the fixes in the 0.4.0 changelog entry).
+Run it before every release alongside `python -m py_compile` and
+`python -m pyflakes` on every changed file. `tests/` itself is excluded
+from packaged plugin zips (`.gitattributes`, `git archive`).
 
 ## License
 

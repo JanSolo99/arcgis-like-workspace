@@ -5,7 +5,7 @@ both QGIS major versions without relying on compatibility aliases that may
 be removed in a future release.
 """
 
-from typing import Any
+from typing import Any, List, Sequence, Tuple
 
 from qgis.PyQt.QtCore import Qt
 from qgis.PyQt.QtWidgets import QToolButton
@@ -47,6 +47,47 @@ def qgis_enum(container: Any, legacy_name: str, enum_group: str) -> Any:
     if legacy_value is not None:
         return legacy_value
     return getattr(getattr(container, enum_group), legacy_name)
+
+
+def qgis_enum_candidates(candidates: Sequence[Tuple[Any, str]]) -> Any:
+    """Return the first resolvable value from an ordered list of enum spellings.
+
+    Some QGIS enums (e.g. snapping types, tolerance units) have moved container
+    *and* changed shape across the 3.28-4.x range this plugin supports -- more
+    than the flat-vs-nested move that qgis_enum() above handles. A single
+    (container, enum_group) pair isn't enough to describe "try Qgis.MapToolUnit,
+    and if that container attribute doesn't even exist yet, fall back to
+    QgsTolerance.UnitType". This is for that case.
+
+    Each candidate is a (container, dotted_attr_path) pair, e.g.
+    ``(Qgis, "SnappingType.Vertex")``, resolved via successive getattr() calls
+    starting from container. A candidate whose container is None (e.g. a class
+    only importable on some QGIS versions) is skipped rather than erroring.
+
+    Returns the first candidate that resolves. Raises AttributeError, with
+    every attempted spelling listed, if none do -- callers should wrap the
+    call in the same try/except-log pattern used for every other native-API
+    call in this plugin, so a future QGIS rename degrades to a logged failure
+    for that one feature rather than an unload-blocking crash.
+    """
+    attempted: List[str] = []
+    for container, attr_path in candidates:
+        if container is None:
+            continue
+        value = container
+        try:
+            for attr in attr_path.split("."):
+                value = getattr(value, attr)
+        except AttributeError:
+            container_name = getattr(container, "__name__", repr(container))
+            attempted.append(f"{container_name}.{attr_path}")
+            continue
+        return value
+    raise AttributeError(
+        "ArcGIS-like Workspace: no candidate enum spelling resolved (tried: "
+        + ", ".join(attempted)
+        + ")"
+    )
 
 
 TOOL_BUTTON_TEXT_UNDER_ICON = qt_enum("ToolButtonTextUnderIcon", "ToolButtonStyle")

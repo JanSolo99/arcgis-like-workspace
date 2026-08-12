@@ -69,24 +69,31 @@ class FeatureRegistry:
     registration failure can't prevent toolbars/docks/style from applying,
     and a notifications-dock teardown failure can't block the rest of
     Restore from running.
+
+    Deliberately no "was this applied" gate on restore_all(): an earlier
+    version tracked an _applied list and skipped restore_fn for anything
+    not in it, which looks like a safety check but breaks the one scenario
+    that matters most -- recovering after a crash. A fresh plugin instance
+    (new process, new FeatureRegistry) has an empty _applied list no matter
+    what QSettings says actually got applied last session, so the gate
+    would skip every restore_fn and plugin.py would then wipe
+    SETTINGS_PREFIX, destroying the only record of what needed undoing.
+    The gate also earned nothing in-session: apply_all() already marks a
+    feature applied before its apply_fn runs (see below), and this
+    module's contract (checklist item 1/7 above) already requires every
+    restore_fn to be a safe no-op against never-applied/partial state.
+    restore_all() therefore just walks every registered feature, in
+    reverse registration order, every time.
     """
 
     def __init__(self):
         self._features: List[_Feature] = []
-        self._applied: List[str] = []
 
     def register(self, name: str, apply_fn: Callable[[], None], restore_fn: Callable[[], None]):
         self._features.append(_Feature(name, apply_fn, restore_fn))
 
     def apply_all(self):
         for feature in self._features:
-            # Marked applied BEFORE calling apply_fn, not after: if apply_fn
-            # raises partway through (e.g. after creating a dock but before
-            # finishing signal wiring), restore_fn must still run during
-            # restore_all() to clean up whatever partial state exists.
-            # Every restore_fn must therefore be safe to call against
-            # no-op/partial state (checking `if self.dock is not None`, etc).
-            self._applied.append(feature.name)
             try:
                 feature.apply_fn()
             except Exception:
@@ -94,10 +101,7 @@ class FeatureRegistry:
 
     def restore_all(self):
         for feature in reversed(self._features):
-            if feature.name not in self._applied:
-                continue
             try:
                 feature.restore_fn()
             except Exception:
                 logger.exception("ArcGIS-like Workspace: '%s' failed to restore", feature.name)
-        self._applied = []
