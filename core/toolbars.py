@@ -54,6 +54,45 @@ def native_action(iface, name: str) -> Optional[QAction]:
     return None
 
 
+def window_action(window, object_name: str) -> Optional[QAction]:
+    """Return a main-window QAction by its object name (e.g.
+    "mActionDataSourceManager").
+
+    QgisInterface only exposes ~110 of QGIS's actions as iface.actionX()
+    accessors; the rest (Data Source Manager, Deselect All, Undo, ...) are
+    only reachable as named children of the main window.
+    """
+    try:
+        action = window.findChild(QAction, object_name)
+    except Exception:
+        logger.debug("findChild(QAction, %r) raised", object_name, exc_info=True)
+        return None
+    return action if isinstance(action, QAction) else None
+
+
+def resolve_action(iface, window, name: str) -> Optional[QAction]:
+    """Resolve *name* as an iface accessor ("actionPan") or, for names
+    starting with "mAction", as a main-window child action."""
+    if name.startswith("mAction"):
+        return window_action(window, name)
+    return native_action(iface, name)
+
+
+def theme_icon(name: str, fallback_standard_icon: str = "SP_FileIcon"):
+    """Return one of QGIS's own themed icons (e.g. "/search.svg"), falling
+    back to a Qt standard icon if the theme lookup fails or comes back
+    empty. QGIS icons fit the rest of the UI; Qt's SP_* pixmaps don't."""
+    try:
+        from qgis.core import QgsApplication
+
+        icon = QgsApplication.getThemeIcon(name)
+        if icon is not None and not icon.isNull():
+            return icon
+    except Exception:
+        logger.debug("QgsApplication.getThemeIcon(%r) failed", name, exc_info=True)
+    return standard_icon(fallback_standard_icon)
+
+
 def standard_icon(name: str):
     """Look up standard pixmaps in both Qt 5 and Qt 6 bindings."""
     standard_pixmaps = getattr(QStyle, "StandardPixmap", None)
@@ -78,47 +117,47 @@ def icon_for_action(iface, name: str):
 
 class ActionGroup:
     """A labelled group of toolbar widgets, retained so callers can later
-    show/hide it (e.g. for contextual visibility based on layer type)."""
+    show/hide it (e.g. for contextual visibility based on layer type).
+
+    Visibility is toggled through QActions this group owns outright: the
+    QWidgetAction handles QToolBar.addWidget() returns for the group label
+    and for each button, plus the group's own leading separator. Neither
+    alternative works:
+
+    * QAction.setVisible() on the *native* actions (iface.actionPan() etc.)
+      would hide them everywhere -- the tab toolbar's menus and QGIS's own
+      menus share the same QAction instances.
+    * QWidget.setVisible() on widgets inside a QToolBar is explicitly
+      unsupported by Qt ("You should use QAction::setVisible() to change
+      the visibility of the widget. Using QWidget::setVisible() ... does
+      not work", QToolBar::addWidget docs) -- the toolbar's layout can
+      re-show them on its next relayout.
+
+    That is why each native action gets its own QToolButton (with the
+    native action as its default action) added via addWidget(), instead
+    of a plain toolbar.addAction().
+    """
 
     def __init__(
         self,
         label: str,
-        label_widget: QLabel,
-        toolbar: QToolBar,
-        actions: List[QAction],
+        widget_actions: List[QAction],
         separator: Optional[QAction] = None,
     ):
         self.label = label
-        self.label_widget = label_widget
-        self.toolbar = toolbar
-        self.actions = actions
+        #: QWidgetActions for the label and every button, in toolbar order.
+        self.widget_actions = widget_actions
         #: This group's own leading separator, or None for the first group
-        #: in the toolbar (nothing precedes it to separate from). Unlike the
-        #: native action QActions in `actions`, this QAction is created by
-        #: and belongs solely to this group -- it is never shared with
-        #: another toolbar or menu -- so toggling its widget's visibility
-        #: here cannot hide it anywhere else. Tracking it keeps contiguous
-        #: hidden groups (e.g. Edit + Selection) from leaving orphaned
-        #: separators behind: each group takes its own leading separator
-        #: with it, and only the boundary separator of the next *visible*
-        #: group remains on screen.
+        #: in the toolbar (nothing precedes it to separate from). Hiding it
+        #: with the group keeps contiguous hidden groups (e.g. Edit +
+        #: Selection) from leaving orphaned separators behind.
         self.separator = separator
 
     def set_visible(self, visible: bool):
-        # Toggle visibility of this toolbar's *widget* for each action, not
-        # the shared QAction itself -- the same native QAction instance
-        # (e.g. iface.actionPan()) is also referenced by the tab toolbar's
-        # dropdown menus and by QGIS's own (hidden) menus, so calling
-        # action.setVisible() here would hide it everywhere it's used.
-        self.label_widget.setVisible(visible)
-        for action in self.actions:
-            widget = self.toolbar.widgetForAction(action)
-            if widget is not None:
-                widget.setVisible(visible)
         if self.separator is not None:
-            separator_widget = self.toolbar.widgetForAction(self.separator)
-            if separator_widget is not None:
-                separator_widget.setVisible(visible)
+            self.separator.setVisible(visible)
+        for action in self.widget_actions:
+            action.setVisible(visible)
 
 
 class ToolbarBuilder:
@@ -133,6 +172,11 @@ class ToolbarBuilder:
         #: Set by create_tab_toolbar(); lets other feature modules (e.g. the
         #: Notifications dock's bell toggle) attach their own actions to it.
         self.tab_toolbar: Optional[QToolBar] = None
+        #: The native toolbar this plugin's toolbars are inserted in front
+        #: of, so they sit at the very top of the toolbar area on their own
+        #: rows (see _place_toolbar()). Captured once, before Apply hides
+        #: anything, and kept across re-applies so the placement is stable.
+        self._anchor: Optional[QToolBar] = None
 
     def hide_default_toolbars(self):
         """Hide well-known QGIS default toolbars.
@@ -140,6 +184,7 @@ class ToolbarBuilder:
         Only toolbars whose object names are in the known QGIS-default set
         are hidden -- plugin and third-party toolbars are left untouched.
         """
+        self._capture_anchor()
         for toolbar in self.window.findChildren(QToolBar):
             name = toolbar.objectName()
             if name.startswith(OBJECT_PREFIX):
@@ -208,6 +253,8 @@ class ToolbarBuilder:
                 "Insert",
                 "actionAddOgrLayer",
                 [
+                    ("mActionDataSourceManager", "Add Data"),
+                    "-",
                     ("actionAddOgrLayer", "Add Vector Layer"),
                     ("actionAddRasterLayer", "Add Raster Layer"),
                     ("actionAddPgLayer", "Add PostGIS Layer"),
@@ -301,6 +348,7 @@ class ToolbarBuilder:
             toolbar,
             "Layers",
             [
+                "mActionDataSourceManager",
                 "actionAddOgrLayer",
                 "actionAddRasterLayer",
                 "actionAddWmsLayer",
@@ -341,8 +389,14 @@ class ToolbarBuilder:
         )
         return toolbar
 
-    def remove_workspace_toolbars(self):
-        """Remove and schedule deletion of all toolbars created by this plugin."""
+    def remove_workspace_toolbars(self, keep_anchor: bool = False):
+        """Remove and schedule deletion of all toolbars created by this plugin.
+
+        *keep_anchor* is for re-apply: the toolbars are about to be rebuilt
+        in the same spot. Restore passes False, since restoreState() then
+        rearranges every toolbar and the old anchor means nothing."""
+        if not keep_anchor:
+            self._anchor = None
         for toolbar in self.created_toolbars:
             self.window.removeToolBar(toolbar)
             toolbar.deleteLater()
@@ -357,7 +411,7 @@ class ToolbarBuilder:
 
     def _add_action_group(self, toolbar: QToolBar, label: str, action_names: List[str]):
         """Append a labelled group of native QGIS actions to *toolbar*."""
-        actions = [native_action(self.iface, name) for name in action_names]
+        actions = [resolve_action(self.iface, self.window, name) for name in action_names]
         actions = [action for action in actions if action is not None]
         if not actions:
             return
@@ -367,14 +421,19 @@ class ToolbarBuilder:
         # with its label and action widgets (see ActionGroup.separator).
         separator = toolbar.addSeparator() if toolbar.actions() else None
 
-        group_label = QLabel(label, self.window)
+        group_label = QLabel(label, toolbar)
         group_label.setObjectName(f"{OBJECT_PREFIX}GroupLabel")
-        toolbar.addWidget(group_label)
+        widget_actions = [toolbar.addWidget(group_label)]
 
         for action in actions:
-            toolbar.addAction(action)
+            button = QToolButton(toolbar)
+            button.setDefaultAction(action)
+            button.setAutoRaise(True)
+            button.setIconSize(toolbar.iconSize())
+            button.setToolButtonStyle(TOOL_BUTTON_TEXT_UNDER_ICON)
+            widget_actions.append(toolbar.addWidget(button))
 
-        self.action_groups[label] = ActionGroup(label, group_label, toolbar, actions, separator)
+        self.action_groups[label] = ActionGroup(label, widget_actions, separator)
 
     def _new_toolbar(self, title: str, suffix: str, icon_size: QSize) -> QToolBar:
         """Create and register a new, non-movable toolbar."""
@@ -384,9 +443,57 @@ class ToolbarBuilder:
         toolbar.setFloatable(False)
         toolbar.setIconSize(icon_size)
         toolbar.setToolButtonStyle(TOOL_BUTTON_TEXT_UNDER_ICON)
-        self.window.addToolBar(TOP_TOOLBAR_AREA, toolbar)
+        self._place_toolbar(toolbar)
         self.created_toolbars.append(toolbar)
         return toolbar
+
+    def _place_toolbar(self, toolbar: QToolBar):
+        """Put *toolbar* on its own row at the top of the toolbar area,
+        below any toolbar this plugin already placed.
+
+        A bare addToolBar(TOP, ...) appends to the *last* toolbar row, next
+        to whatever is already there -- that put the tab and ribbon
+        toolbars side by side on one row (squeezing the ribbon into its
+        overflow chevron) and underneath every still-visible native or
+        third-party toolbar. Instead, each toolbar is inserted in front of
+        the anchor (the top-left native toolbar), then a break is inserted
+        before the anchor so it starts a new row: the first call leaves
+        [tabs] / [anchor ...], the second [tabs] / [ribbon] / [anchor ...].
+        """
+        anchor = self._anchor if self._is_top_toolbar(self._anchor) else None
+        if anchor is None:
+            self.window.addToolBarBreak(TOP_TOOLBAR_AREA)
+            self.window.addToolBar(TOP_TOOLBAR_AREA, toolbar)
+            return
+        self.window.insertToolBar(anchor, toolbar)
+        self.window.insertToolBarBreak(anchor)
+
+    def _capture_anchor(self):
+        """Record the top-left visible native toolbar as the anchor, unless
+        a still-valid one is already recorded. Must run before Apply hides
+        anything -- hidden toolbars' geometry says nothing about where they
+        sit."""
+        if self._is_top_toolbar(self._anchor):
+            return
+        self._anchor = None
+        candidates = []
+        for toolbar in self.window.findChildren(QToolBar):
+            if toolbar.objectName().startswith(OBJECT_PREFIX):
+                continue
+            if not toolbar.isVisible() or not self._is_top_toolbar(toolbar):
+                continue
+            geometry = toolbar.geometry()
+            candidates.append((geometry.y(), geometry.x(), toolbar))
+        if candidates:
+            self._anchor = min(candidates, key=lambda item: (item[0], item[1]))[2]
+
+    def _is_top_toolbar(self, toolbar: Optional[QToolBar]) -> bool:
+        if toolbar is None:
+            return False
+        try:
+            return self.window.toolBarArea(toolbar) == TOP_TOOLBAR_AREA
+        except RuntimeError:
+            return False  # native toolbar deleted since it was captured
 
     def _make_menu_button(self, label: str, icon_action_name: str, action_specs: list) -> QToolButton:
         """Build a drop-down menu button labelled *label* whose menu is populated
@@ -404,7 +511,7 @@ class ToolbarBuilder:
                 continue
 
             action_name, fallback_text = spec
-            action = native_action(self.iface, action_name)
+            action = resolve_action(self.iface, self.window, action_name)
             if action is not None:
                 menu.addAction(action)
             else:

@@ -4,6 +4,70 @@ All notable changes to this project are documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [0.4.2] - 2026-09-27
+
+From a code review followed by running the plugin in a real QGIS 4.2
+session (offscreen, screenshots) before and after each fix.
+
+### Fixed
+
+- **Tab and ribbon toolbars shared one row.** `ToolbarBuilder` added both
+  with a bare `addToolBar(TOP, ...)`, which appends to the last existing
+  toolbar row: in QGIS 4.2 the ribbon was squeezed to 124px (only its
+  "Project" label visible, everything else behind the overflow chevron),
+  under the still-visible native toolbars. Both are now inserted in front
+  of the top-left native toolbar, each on its own row
+  (`ToolbarBuilder._place_toolbar()`), and stay there across re-applies.
+- **Native toolbars left above the ribbon.** `mDataSourceManagerToolBar`
+  was missing from the hide list, and several toolbar names were QGIS 3
+  spellings only (`mAnnotationsToolBar`, `mMeshToolBar`, `mGpsToolBar` added).
+  `QGIS_DEFAULT_VISIBLE_TOOLBAR_NAMES` is corrected against a fresh QGIS
+  4.2 profile -- the 0.4.1 list didn't match it (it included Manage Layers,
+  which stock 4.2 hides, and a `mProjectToolBar` 4.2 doesn't have).
+- **Hard-coded light colors.** The stylesheet is now built from the Qt
+  palette at apply time, so it stays readable in dark themes (0.4.1 drew
+  light button text on a white ribbon under a dark palette).
+- **Ribbon labels truncated** ("Zo...ut"): the stylesheet's `min-width` made
+  the toolbar size ribbon buttons to 82px instead of their 108px size hint.
+- **Contextual ribbon groups hid unreliably.** `ActionGroup.set_visible()`
+  called `QWidget.setVisible()` on toolbar widgets, which Qt documents as
+  unsupported. Each ribbon entry is now a `QToolButton` wrapping the native
+  action, added via `addWidget()`, and groups toggle the `QWidgetAction`s
+  they own.
+- **Snapping restore could hit the wrong project.** Apply on project A,
+  open project B, Restore wrote A's snapping into B. The saved original is
+  now dropped when the project is cleared, a snapping change made after
+  Apply is left alone, and neither Apply nor Restore marks a clean project
+  dirty. Only the four settings Apply changes are saved and compared --
+  comparing the whole config failed as soon as a layer was added.
+- **Find button did nothing on QGIS 4.** `findChild(QgsLocatorWidget)`
+  returns None there (the widget is only known to PyQt as a `QWidget`);
+  it's now found by Qt class name and `sip.cast()`.
+- **Locator filter duplicated results and wasn't thread-safe.** QGIS's
+  built-in layer, bookmark and processing filters already run without a
+  prefix, so every layer/bookmark/algorithm hit showed twice. The filter
+  now only emits ArcGIS tool-name aliases the built-ins can't find, and
+  reads a registry snapshot taken in `prepare()` (main thread) instead of
+  touching QGIS objects from `fetchResults()`'s worker thread.
+- **Dock lookup depended on the UI language.** Docks are now matched by
+  exact object name first (`Layers`, `Browser`, `ProcessingToolbox`, ...);
+  the title-substring match is only a fallback, and can no longer pick up
+  "Browser (2)".
+
+### Changed
+
+- Digitizing and Snapping toolbars show only while the active vector
+  layer is in edit mode; Labeling only while a vector layer is active.
+- "Add Data" (Data Source Manager) added to the Insert menu and Layers
+  ribbon group, replacing the now-hidden Data Source Manager toolbar.
+- Notifications uses QGIS's Log Messages icon with a painted unread-count
+  badge instead of a "(N)" text suffix.
+- Ambiguous ArcGIS aliases (Erase, Merge, Append, Mosaic, Raster to
+  Polygon, Polygon to Raster) now point at exact algorithm ids; "Mosaic"
+  used to match every algorithm with "merge" in its name.
+- Stylesheet Restore removes only this plugin's marker-delimited block, so
+  rules another plugin added in the meantime survive.
+
 ## [0.4.1] - 2026-08-12
 
 Two bugs found the same way the 0.4.0 ones should have been caught in the

@@ -10,6 +10,7 @@ from qgis.core import Qgis, QgsProject, QgsSnappingConfig, QgsTolerance
 
 from .compat import qgis_enum_candidates
 from .constants import Keys
+from .reversible import ConnectionTracker
 
 logger = logging.getLogger(__name__)
 
@@ -98,6 +99,22 @@ _TOLERANCE_PIXELS_CANDIDATES = (
     (QgsTolerance, "UnitType.Pixels"),
 )
 
+#: The (getter, setter) pairs of the snapping settings Apply changes. Save,
+#: compare and restore only these -- never the whole QgsSnappingConfig,
+#: which also carries per-layer settings that change on their own whenever
+#: a layer is added or removed (verified in QGIS 4.2: a whole-config
+#: equality check fails as soon as a layer is added after Apply).
+_SNAPPING_FIELDS = (
+    ("enabled", "setEnabled"),
+    ("tolerance", "setTolerance"),
+    ("units", "setUnits"),
+    ("typeFlag", "setTypeFlag"),
+)
+
+
+def _snapping_fields(config) -> tuple:
+    return tuple(getattr(config, getter)() for getter, _setter in _SNAPPING_FIELDS)
+
 
 class SettingsToggles:
     """Dock-attribute-tables and default-snapping toggles, reversibly."""
@@ -105,7 +122,13 @@ class SettingsToggles:
     def __init__(self, settings, key_fn):
         self.settings = settings
         self._key = key_fn
+        #: _snapping_fields() of the project's config before Apply.
         self._original_snapping_config = None
+        #: _snapping_fields() of the config this plugin set, to tell at
+        #: restore time whether the user has changed snapping since (then
+        #: theirs wins).
+        self._applied_snapping_config = None
+        self._project_connections = ConnectionTracker()
         self._applied = False
 
     def apply(self):
@@ -164,10 +187,22 @@ class SettingsToggles:
         self.settings.remove(original_key)
 
     # -- Snapping defaults (current project only, not persisted) ----------
+    #
+    # The change is scoped to the project that was open at Apply time:
+    #
+    # * If that project is closed/replaced (QgsProject.cleared fires on New,
+    #   Open and Close), the saved original belongs to a project that's
+    #   gone -- writing it back on Restore would stamp the old project's
+    #   snapping onto the new one. The record is dropped instead.
+    # * If the user edits snapping after Apply, Restore leaves their
+    #   settings alone rather than reverting them.
+    # * Neither Apply nor Restore marks a clean project dirty: they're
+    #   session presentation, not an edit the user should be prompted to
+    #   save.
 
     def _apply_snapping_defaults(self):
         project = QgsProject.instance()
-        self._original_snapping_config = project.snappingConfig()
+        self._original_snapping_config = _snapping_fields(project.snappingConfig())
 
         config = project.snappingConfig()
         try:
@@ -189,14 +224,42 @@ class SettingsToggles:
         except Exception:
             logger.exception("ArcGIS-like Workspace: could not set snapping type")
 
-        project.setSnappingConfig(config)
+        self._set_snapping_config_keeping_dirty_state(project, config)
+        self._applied_snapping_config = _snapping_fields(project.snappingConfig())
+
+        try:
+            self._project_connections.connect(project.cleared, self._forget_snapping_original)
+        except Exception:
+            logger.exception("ArcGIS-like Workspace: could not watch for the project being replaced")
 
     def _restore_snapping_defaults(self):
-        if self._original_snapping_config is None:
+        self._project_connections.disconnect_all()
+        original = self._original_snapping_config
+        applied = self._applied_snapping_config
+        self._forget_snapping_original()
+        if original is None:
             return
         try:
-            QgsProject.instance().setSnappingConfig(self._original_snapping_config)
+            project = QgsProject.instance()
+            config = project.snappingConfig()
+            if applied is not None and _snapping_fields(config) != applied:
+                logger.info(
+                    "ArcGIS-like Workspace: snapping was changed after Apply, leaving it as it is"
+                )
+                return
+            for (_getter, setter), value in zip(_SNAPPING_FIELDS, original):
+                getattr(config, setter)(value)
+            self._set_snapping_config_keeping_dirty_state(project, config)
         except Exception:
             logger.exception("ArcGIS-like Workspace: could not restore snapping config")
-        finally:
-            self._original_snapping_config = None
+
+    def _forget_snapping_original(self):
+        self._original_snapping_config = None
+        self._applied_snapping_config = None
+
+    @staticmethod
+    def _set_snapping_config_keeping_dirty_state(project, config):
+        was_dirty = project.isDirty()
+        project.setSnappingConfig(config)
+        if not was_dirty:
+            project.setDirty(False)
