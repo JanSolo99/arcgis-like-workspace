@@ -133,9 +133,67 @@ class FakeMainWindow:
     def __init__(self):
         self._docks = []
         self._stylesheet = ""
+        #: Top-area toolbar rows, top to bottom, each a list of toolbars --
+        #: enough of QMainWindow's toolbar layout to check where
+        #: ToolbarBuilder._place_toolbar() puts things.
+        self.toolbar_rows = []
+        #: Toolbars in other areas (area -> list).
+        self.other_toolbars = {}
+        #: objectName -> QAction, for findChild(QAction, name).
+        self.named_actions = {}
 
     def findChildren(self, cls):
-        return [dock for dock in self._docks if isinstance(dock, cls)]
+        children = list(self._docks) + [tb for row in self.toolbar_rows for tb in row]
+        children += [tb for toolbars in self.other_toolbars.values() for tb in toolbars]
+        return [child for child in children if isinstance(child, cls)]
+
+    def findChild(self, cls, name=None):
+        action = self.named_actions.get(name)
+        return action if isinstance(action, cls) else None
+
+    # -- toolbar layout (top area only) -----------------------------------
+
+    def _row_of(self, toolbar):
+        for index, row in enumerate(self.toolbar_rows):
+            if toolbar in row:
+                return index
+        return None
+
+    def toolBarArea(self, toolbar):
+        if self._row_of(toolbar) is not None:
+            return "TopToolBarArea"
+        for area, toolbars in self.other_toolbars.items():
+            if toolbar in toolbars:
+                return area
+        return "NoToolBarArea"
+
+    def addToolBarBreak(self, area):
+        self.toolbar_rows.append([])
+
+    def addToolBar(self, area, toolbar):
+        if not self.toolbar_rows:
+            self.toolbar_rows.append([])
+        self.toolbar_rows[-1].append(toolbar)
+
+    def insertToolBar(self, before, toolbar):
+        row = self.toolbar_rows[self._row_of(before)]
+        row.insert(row.index(before), toolbar)
+
+    def insertToolBarBreak(self, before):
+        index = self._row_of(before)
+        row = self.toolbar_rows[index]
+        position = row.index(before)
+        if position == 0:
+            return  # already starts a row -- Qt ignores this too
+        self.toolbar_rows[index:index + 1] = [row[:position], row[position:]]
+
+    def removeToolBar(self, toolbar):
+        index = self._row_of(toolbar)
+        if index is None:
+            return
+        self.toolbar_rows[index].remove(toolbar)
+        if not self.toolbar_rows[index]:
+            del self.toolbar_rows[index]
 
     def addDockWidget(self, area, dock):
         if dock not in self._docks:

@@ -14,15 +14,21 @@ or proprietary UI code.
 - **Tab toolbar** — drop-down menus grouped by functional area (Project, Map,
   Insert, Edit, Analysis, View), similar to ArcGIS Pro's ribbon tabs.
 - **Ribbon toolbar** — icon+label action groups for quick access to common
-  tools, with Edit/Selection groups shown or hidden based on the active
-  layer's type (vector vs. raster), mirroring ArcGIS Pro's contextual
-  ribbon tabs.
+  tools (including **Add Data**, QGIS's Data Source Manager), with
+  Edit/Selection groups shown or hidden based on the active layer's type
+  (vector vs. raster), mirroring ArcGIS Pro's contextual ribbon tabs. The
+  tab and ribbon toolbars each get their own row at the top of the window.
+- **Contextual native toolbars** — QGIS's Digitizing and Snapping toolbars
+  appear only while the active vector layer is being edited, and the
+  Labeling toolbar only while a vector layer is active, the way Pro only
+  surfaces editing tools in context.
 - **Dock arrangement** — "Contents" pane on the left; stacked "Catalog" /
   "Geoprocessing" / "Symbology" / "Identify Results" panes on the right;
   "Log Messages" at the bottom (hidden by default). All native QGIS docks,
   just repositioned and renamed.
-- **ArcGIS-inspired stylesheet** — light-gray toolbar backgrounds, subtle
-  borders, and compact buttons.
+- **ArcGIS-inspired stylesheet** — flat ribbon, subtle borders, and
+  accent-tinted hover, with colors taken from your current Qt palette so it
+  stays readable in dark themes too.
 
 **Behavior**
 
@@ -34,13 +40,13 @@ or proprietary UI code.
   additively via QGIS's supported `addCustomActionForLayerType()` API —
   the rest of the native menu (export, duplicate, set CRS, etc.) is
   untouched.
-- **Notifications dock** — a bell-style toggle showing an unread count,
+- **Notifications dock** — a toggle whose icon carries a painted unread-count badge,
   aggregating background task events and warning/critical log messages.
-- **Unified locator** — search layers, geoprocessing tools, and bookmarks
-  in one query via QGIS's native locator bar (`Ctrl+K`), plus a "Find"
-  button that focuses it. Also recognizes a handful of ArcGIS Pro tool
-  names as aliases for their QGIS Processing equivalent (e.g. typing
-  "Erase" finds Difference) — see Usage below.
+- **ArcGIS tool names in search** — QGIS's native locator bar (`Ctrl+K`)
+  already finds layers, bookmarks, and geoprocessing tools; this adds
+  ArcGIS Pro tool names as aliases for their QGIS Processing equivalent
+  (e.g. typing "Erase" finds Difference), plus a "Find" button that focuses
+  the locator bar — see Usage below.
 - **Opt-in keyboard shortcut remap** toward ArcGIS Pro conventions, kept
   separate from the main preset and collision-safe (see Usage below).
 - **Apply at QGIS Startup** — an opt-in checkable menu option that
@@ -84,7 +90,7 @@ itself to still be QGIS's.
 | **Restore Previous QGIS Workspace**       | "Restore" button on the tab toolbar, or the plugin menu            |
 | **Reset to Default QGIS Workspace**       | "Reset to Default" button on the tab toolbar, or the plugin menu — a stronger reset than Restore, see below |
 | **About**                                 | **Plugins → ArcGIS-like Workspace → About This Workspace**         |
-| **Notifications**                         | Bell button on the tab toolbar (shows an unread count when hidden) |
+| **Notifications**                         | Notifications button on the tab toolbar (paints an unread count on its icon while hidden) |
 | **Find (layers, tools, bookmarks, ArcGIS tool names)** | "Find" button on the tab toolbar, or QGIS's native `Ctrl+K` |
 | **Toggle Labels**                         | Right-click a layer in Contents                                    |
 | **Apply ArcGIS-like Shortcuts (opt-in)**  | **Plugins → ArcGIS-like Workspace** menu — separate from the main preset, see below |

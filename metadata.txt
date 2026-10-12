@@ -2,7 +2,7 @@
 name=ArcGIS-like Workspace
 description=Applies an ArcGIS Pro-inspired workspace preset and behavior to QGIS using native QGIS actions, toolbars, dock widgets, settings, and Qt styling.
 about=This plugin rearranges QGIS into an ArcGIS Pro-inspired workspace and layers on genuine behavioral parity (contextual ribbon, Labeling toggle, Notifications, unified search, opt-in shortcuts) while keeping QGIS behavior native and reversible. It does not include Esri assets, branding, or proprietary UI code.
-version=0.4.1
+version=0.4.2
 qgisMinimumVersion=3.28
 qgisMaximumVersion=4.99
 author=Jan TvB
@@ -13,7 +13,22 @@ tags=ui,workspace,toolbar,layout,arcgis
 homepage=https://github.com/JanSolo99/arcgis-like-workspace
 repository=https://github.com/JanSolo99/arcgis-like-workspace
 tracker=https://github.com/JanSolo99/arcgis-like-workspace/issues
-changelog=0.4.1
+changelog=0.4.2
+    - Fixed: the tab and ribbon toolbars shared one row (ribbon squeezed
+      into its overflow menu) below the native toolbars; each now has its
+      own row at the top.
+    - Fixed: stylesheet colors now follow the Qt palette (readable in dark
+      themes); ribbon labels are no longer truncated.
+    - Fixed: contextual ribbon groups now hide reliably.
+    - Fixed: Restore no longer writes one project's snapping settings into
+      another, overwrites later snapping edits, or marks projects dirty.
+    - Fixed: the Find button did nothing on QGIS 4; the locator no longer
+      duplicates QGIS's own layer/bookmark/algorithm results.
+    - Fixed: panels are found by object name, not translated title.
+    - Changed: Digitizing/Snapping/Labeling toolbars follow the active
+      layer; Data Source Manager toolbar hidden, Add Data added to the
+      ribbon; Notifications shows a painted unread badge.
+    0.4.1
     - Fixed: Contents/Catalog dock rearrangement sometimes needed two
       Apply clicks to actually move a dock (e.g. Browser) that starts
       tabbed with another one. First-click reliability fix.

@@ -52,6 +52,13 @@ class QgsSnappingConfig:
         self._tolerance = None
         self._units = None
         self._type_flag = None
+        #: Stands in for the per-layer settings the real config carries,
+        #: which change whenever layers are added -- not something Apply
+        #: touches.
+        self._individual_layer_settings = {}
+
+    def set_layer_settings(self, layer_id, settings):
+        self._individual_layer_settings[layer_id] = settings
 
     def setEnabled(self, enabled: bool):
         self._enabled = enabled
@@ -85,6 +92,7 @@ class QgsSnappingConfig:
             and self._tolerance == other._tolerance
             and self._units == other._units
             and self._type_flag == other._type_flag
+            and self._individual_layer_settings == other._individual_layer_settings
         )
 
     def __repr__(self):
@@ -121,6 +129,21 @@ class QgsProject:
         self._snapping_config = QgsSnappingConfig()
         self._layers: Dict[str, Any] = {}
         self._bookmark_manager = _FakeBookmarkManager()
+        self._dirty = False
+        #: Emitted by the real QgsProject on New/Open/Close (clear()).
+        self.cleared = FakeSignal()
+
+    def isDirty(self) -> bool:
+        return self._dirty
+
+    def setDirty(self, dirty: bool = True):
+        self._dirty = dirty
+
+    def clear(self):
+        """Test helper mirroring QgsProject.clear(): fresh state, then cleared."""
+        self._snapping_config = QgsSnappingConfig()
+        self._dirty = False
+        self.cleared.emit()
 
     @classmethod
     def instance(cls) -> "QgsProject":
@@ -132,6 +155,9 @@ class QgsProject:
         return copy.deepcopy(self._snapping_config)
 
     def setSnappingConfig(self, config: QgsSnappingConfig):
+        # Real QgsProject marks itself dirty when the config changes.
+        if config != self._snapping_config:
+            self._dirty = True
         self._snapping_config = copy.deepcopy(config)
 
     def mapLayers(self) -> Dict[str, Any]:
@@ -180,9 +206,24 @@ class _FakeTaskManager:
         self._tasks.pop(task_id, None)
 
 
+class FakeAlgorithm:
+    def __init__(self, algorithm_id: str, display_name: str):
+        self._id = algorithm_id
+        self._display_name = display_name
+
+    def id(self) -> str:
+        return self._id
+
+    def displayName(self) -> str:
+        return self._display_name
+
+
 class _FakeProcessingRegistry:
+    def __init__(self):
+        self._algorithms = []
+
     def algorithms(self):
-        return []
+        return list(self._algorithms)
 
 
 class QgsApplication:
@@ -193,6 +234,7 @@ class QgsApplication:
 
     _message_log = _FakeMessageLog()
     _task_manager = _FakeTaskManager()
+    _processing_registry = _FakeProcessingRegistry()
 
     @classmethod
     def messageLog(cls) -> _FakeMessageLog:
@@ -204,7 +246,13 @@ class QgsApplication:
 
     @classmethod
     def processingRegistry(cls) -> _FakeProcessingRegistry:
-        return _FakeProcessingRegistry()
+        return cls._processing_registry
+
+    @staticmethod
+    def getThemeIcon(name: str):
+        from .PyQt.QtGui import QIcon
+
+        return QIcon(name)
 
 
 def reset_singletons():
@@ -213,6 +261,7 @@ def reset_singletons():
     every test."""
     QgsApplication._message_log = _FakeMessageLog()
     QgsApplication._task_manager = _FakeTaskManager()
+    QgsApplication._processing_registry = _FakeProcessingRegistry()
     QgsProject._instance = None
 
 
@@ -221,7 +270,25 @@ class QgsRasterLayer:
 
 
 class QgsVectorLayer:
-    """Empty stand-in -- only used via isinstance() in contextual_ribbon.py."""
+    """Stand-in for the bits contextual_ribbon.py touches: isinstance(),
+    isEditable() and the editingStarted/editingStopped signals."""
+
+    def __init__(self):
+        self._editable = False
+        self.editingStarted = FakeSignal()
+        self.editingStopped = FakeSignal()
+
+    def isEditable(self) -> bool:
+        return self._editable
+
+    def startEditing(self):
+        """Test helper standing in for toggling edit mode."""
+        self._editable = True
+        self.editingStarted.emit()
+
+    def stopEditing(self):
+        self._editable = False
+        self.editingStopped.emit()
 
 
 class QgsLocatorResult:

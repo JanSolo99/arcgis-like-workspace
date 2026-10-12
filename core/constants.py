@@ -18,6 +18,10 @@ SETTINGS_PREFIX = "arcgis_like_workspace"
 SHORTCUTS_SETTINGS_PREFIX = "arcgis_like_workspace_shortcuts"
 
 STYLE_MARKER = "/* arcgis-like-workspace-style */"
+#: Closes the block STYLE_MARKER opens, so Restore can cut out exactly this
+#: plugin's rules and leave anything appended after them (e.g. by another
+#: plugin) in place.
+STYLE_END_MARKER = "/* /arcgis-like-workspace-style */"
 
 
 class Keys:
@@ -29,19 +33,16 @@ class Keys:
     DOCK_ATTRIBUTE_TABLE_ORIGINAL = "dockAttributeTableOriginal"
 
 
-# Standard QGIS toolbar object names that Apply may hide. Only toolbars
-# whose object names are in this known-default set are hidden -- plugin and
-# third-party toolbars are always left untouched.
+# Standard QGIS toolbar object names that Apply hides. Only toolbars whose
+# object names are in this known-default set are hidden -- plugin and
+# third-party toolbars are always left untouched. Names are the union of
+# what QGIS 3.28-3.40 and 4.x use (checked against a fresh QGIS 4.2 profile,
+# 2026-09-27); a name missing from the running version is simply never
+# matched.
 #
-# Deliberately EXCLUDED: mDigitizeToolBar, mAdvancedDigitizeToolBar,
-# mSnappingToolBar, mLabelToolBar (see QGIS_EDITING_TOOLBAR_NAMES below).
-# The replacement ribbon/tab "Edit" group only exposes five actions (toggle
-# editing, save edits, add feature, vertex tool, delete selected) -- nowhere
-# near the editing capability those native toolbars provide, and
-# mSnappingToolBar is the only UI for adjusting snapping settings at all.
-# Apply hiding them would strip capability the preset does not replace.
-# Reset to Default QGIS Workspace has different needs -- see
-# QGIS_DEFAULT_VISIBLE_TOOLBAR_NAMES -- and does look at these too.
+# The editing-related toolbars are NOT in this set -- see
+# QGIS_CONTEXTUAL_TOOLBAR_NAMES below, which shows/hides them based on the
+# active layer instead of hiding them outright.
 QGIS_DEFAULT_TOOLBAR_NAMES: set = {
     "mFileToolBar",
     "mLayerToolBar",
@@ -51,39 +52,56 @@ QGIS_DEFAULT_TOOLBAR_NAMES: set = {
     "mRasterToolBar",
     "mWebToolBar",
     "mDatabaseToolBar",
+    "mDataSourceManagerToolBar",
     "mHelpToolBar",
     "mPluginToolBar",
     "mSelectionToolBar",
     "mProjectToolBar",
     "mAnnotationToolBar",
+    "mAnnotationsToolBar",
     "mDataStreamingToolBar",
     "mShapeDigitizeToolBar",
+    "mMeshToolBar",
     "mMeshDigitizingToolBar",
+    "mGpsToolBar",
 }
 
-# The editing-related toolbars Apply deliberately leaves alone (see the
-# comment above) -- kept as a separate set because Reset to Default QGIS
-# Workspace has a different job than Apply: it isn't trying to preserve
-# whatever editing setup you had, it's trying to reproduce a stock QGIS
-# install, and these ARE part of that stock state (see below).
-QGIS_EDITING_TOOLBAR_NAMES: set = {
-    "mDigitizeToolBar",
-    "mAdvancedDigitizeToolBar",
-    "mSnappingToolBar",
-    "mLabelToolBar",
-}
+# Native toolbars whose visibility follows the active layer while the
+# workspace is applied, the way ArcGIS Pro only surfaces editing and
+# labeling tools in context (see contextual_ribbon.py). The ribbon's own
+# Edit group exposes only five actions -- nowhere near what these provide,
+# and mSnappingToolBar is the main snapping UI -- so they are shown when
+# relevant rather than hidden for good.
+#
+#: Shown only while the active layer is a vector layer in edit mode.
+QGIS_EDITING_CONTEXT_TOOLBAR_NAMES: tuple = ("mDigitizeToolBar", "mSnappingToolBar")
+#: Shown whenever the active layer is a vector layer.
+QGIS_VECTOR_CONTEXT_TOOLBAR_NAMES: tuple = ("mLabelToolBar",)
+QGIS_CONTEXTUAL_TOOLBAR_NAMES: set = set(QGIS_EDITING_CONTEXT_TOOLBAR_NAMES) | set(
+    QGIS_VECTOR_CONTEXT_TOOLBAR_NAMES
+)
 
-# Toolbars actually visible by default in a stock QGIS install -- confirmed
-# against a real QGIS 4 session's View > Toolbars checkboxes (2026-08-12).
-# Every other toolbar in QGIS_DEFAULT_TOOLBAR_NAMES/QGIS_EDITING_TOOLBAR_NAMES
-# is HIDDEN by default. This matters specifically for "Reset to Default QGIS
-# Workspace": showing every toolbar this plugin knows about is not QGIS's
-# default, it's toolbar soup -- Reset needs to know which ones QGIS itself
-# would leave hidden, not just which ones exist.
+# Every editing-related toolbar, for Reset to Default QGIS Workspace, which
+# has a different job than Apply: it reproduces a stock QGIS install, and
+# these ARE part of that stock state.
+QGIS_EDITING_TOOLBAR_NAMES: set = QGIS_CONTEXTUAL_TOOLBAR_NAMES | {"mAdvancedDigitizeToolBar"}
+
+# Toolbars visible by default in a stock QGIS install -- read off a fresh
+# QGIS 4.2 profile (2026-09-27). Every other toolbar in
+# QGIS_DEFAULT_TOOLBAR_NAMES/QGIS_EDITING_TOOLBAR_NAMES is HIDDEN by default.
+# This matters specifically for "Reset to Default QGIS Workspace": showing
+# every toolbar this plugin knows about is not QGIS's default, it's toolbar
+# soup -- Reset needs to know which ones QGIS itself would leave hidden.
 QGIS_DEFAULT_VISIBLE_TOOLBAR_NAMES: set = {
-    "mAttributesToolBar",
-    "mLayerToolBar",
+    "mFileToolBar",
+    "mDataSourceManagerToolBar",
+    "mDigitizeToolBar",
     "mMapNavToolBar",
-    "mProjectToolBar",
+    "mAttributesToolBar",
     "mSelectionToolBar",
+    "mLabelToolBar",
+    "mVectorToolBar",
+    "mWebToolBar",
+    "mPluginToolBar",
+    "mHelpToolBar",
 }

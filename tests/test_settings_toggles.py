@@ -131,3 +131,84 @@ def test_apply_restore_round_trip_preserves_a_pre_existing_true_value():
     assert settings.value(DOCK_ATTRIBUTE_TABLE_KEY) is True
     assert settings.value(DOCK_ATTRIBUTE_TABLE_DOCKED_SETTING_KEY) is True
     assert not settings.contains(key_fn(_PREFIX)(Keys.DOCK_ATTRIBUTE_TABLE_ORIGINAL))
+
+
+# -- Snapping ---------------------------------------------------------------
+
+from qgis.core import QgsProject  # noqa: E402
+
+
+def test_snapping_apply_and_restore_leave_a_clean_project_clean():
+    project = QgsProject.instance()
+    original = project.snappingConfig()
+    toggles = _make_toggles(QSettings())
+
+    toggles.apply()
+    assert project.snappingConfig().enabled() is True
+    assert project.isDirty() is False
+
+    toggles.restore()
+    assert project.snappingConfig() == original
+    assert project.isDirty() is False
+
+
+def test_snapping_restore_keeps_an_already_dirty_project_dirty():
+    project = QgsProject.instance()
+    project.setDirty(True)
+    toggles = _make_toggles(QSettings())
+
+    toggles.apply()
+    toggles.restore()
+
+    assert project.isDirty() is True
+
+
+def test_snapping_restore_after_the_project_was_replaced_does_nothing():
+    """Apply on project A, open project B, Restore: B's snapping must not
+    be overwritten with A's saved original."""
+    project = QgsProject.instance()
+    toggles = _make_toggles(QSettings())
+    toggles.apply()
+
+    project.clear()  # New/Open project
+    project_b_config = project.snappingConfig()
+    project_b_config.setTolerance(99)
+    project.setSnappingConfig(project_b_config)
+
+    toggles.restore()
+
+    assert project.snappingConfig().tolerance() == 99
+
+
+def test_snapping_restore_respects_changes_made_after_apply():
+    project = QgsProject.instance()
+    toggles = _make_toggles(QSettings())
+    toggles.apply()
+
+    edited = project.snappingConfig()
+    edited.setTolerance(30)
+    project.setSnappingConfig(edited)
+
+    toggles.restore()
+
+    assert project.snappingConfig().tolerance() == 30
+    assert project.cleared.slots == []
+
+
+def test_snapping_restore_still_works_after_layers_were_added():
+    """Adding a layer changes the config's per-layer settings (real QGIS
+    4.2 behavior) -- that's not a user edit of snapping and must not
+    block Restore, nor be thrown away by it."""
+    project = QgsProject.instance()
+    toggles = _make_toggles(QSettings())
+    toggles.apply()
+
+    config = project.snappingConfig()
+    config.set_layer_settings("layer-1", "vertex")
+    project.setSnappingConfig(config)
+
+    toggles.restore()
+
+    restored = project.snappingConfig()
+    assert restored.enabled() is False
+    assert restored._individual_layer_settings == {"layer-1": "vertex"}

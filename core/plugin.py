@@ -31,7 +31,7 @@ from qgis.PyQt.QtWidgets import QAction, QMessageBox
 from .compat import QGIS_CRITICAL, QGIS_INFO, QGIS_WARNING
 from .constants import Keys, MENU_NAME, SETTINGS_PREFIX
 from .contextual_ribbon import ContextualRibbon
-from .docks import DockArranger
+from .docks import CATALOG_DOCK, CONTENTS_DOCK, DockArranger
 from .layertree_menu import LayerTreeLabelingMenu
 from .locator_filter import LocatorFeature
 from .notifications import NotificationsDock
@@ -297,7 +297,7 @@ class ArcGISLikeWorkspacePlugin:
         """Apply the ArcGIS-like workspace: save current state, create ribbon + tab toolbars,
         rearrange dock widgets, and apply the ArcGIS-inspired stylesheet."""
         self._save_original_window_state_once()
-        self.toolbars.remove_workspace_toolbars()
+        self.toolbars.remove_workspace_toolbars(keep_anchor=True)
         self.toolbars.hide_default_toolbars()
         self.toolbars.create_tab_toolbar(self.restore_layout, self.reset_to_default_workspace)
         self.toolbars.create_ribbon_toolbar()
@@ -355,14 +355,11 @@ class ArcGISLikeWorkspacePlugin:
         self.restore_layout()
         self.toolbars.show_default_toolbars()
 
-        contents = self.docks.find_dock(
-            ["layers", "layer tree", "legend", "toc"],
-            exclude=["styling", "style", "symbology"],
-        )
+        contents = self.docks.find_named_dock(CONTENTS_DOCK)
         if contents is not None:
             contents.setVisible(True)
 
-        catalog = self.docks.find_dock(["browser"])
+        catalog = self.docks.find_named_dock(CATALOG_DOCK)
         if catalog is not None:
             catalog.setVisible(True)
 

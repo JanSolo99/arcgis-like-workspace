@@ -148,6 +148,10 @@ class QAction:
         return f"QAction({self._text!r})"
 
 
+class QWidget:
+    """Base stand-in; only used as a findChildren() type filter."""
+
+
 class QLabel:
     def __init__(self, text: str = "", parent=None):
         self._text = text
@@ -200,7 +204,22 @@ class QToolButton:
         self._popup_mode = None
         self._style = None
         self._tooltip = ""
+        self._default_action: Optional[QAction] = None
+        self._auto_raise = False
+        self._icon_size = None
         self.clicked = FakeSignal()
+
+    def setDefaultAction(self, action: QAction):
+        self._default_action = action
+
+    def defaultAction(self) -> Optional[QAction]:
+        return self._default_action
+
+    def setAutoRaise(self, enabled: bool):
+        self._auto_raise = enabled
+
+    def setIconSize(self, size):
+        self._icon_size = size
 
     def setText(self, text: str):
         self._text = text
@@ -230,6 +249,17 @@ class QToolButton:
         self._tooltip = tooltip
 
 
+class _Rect:
+    def __init__(self, x: int, y: int):
+        self._x, self._y = x, y
+
+    def x(self) -> int:
+        return self._x
+
+    def y(self) -> int:
+        return self._y
+
+
 class QToolBar:
     def __init__(self, title: str = "", parent=None):
         self._title = title
@@ -242,12 +272,21 @@ class QToolBar:
         self._icon_size = None
         self._style = None
         self._visible = True
+        #: (x, y) -- set by tests to model where a native toolbar sits.
+        self.position = (0, 0)
+        self.deleted = False
 
     def setObjectName(self, name: str):
         self._object_name = name
 
     def objectName(self) -> str:
         return self._object_name
+
+    def geometry(self):
+        return _Rect(*self.position)
+
+    def deleteLater(self):
+        self.deleted = True
 
     def setMovable(self, movable: bool):
         self._movable = movable
@@ -257,6 +296,9 @@ class QToolBar:
 
     def setIconSize(self, size):
         self._icon_size = size
+
+    def iconSize(self):
+        return self._icon_size
 
     def setToolButtonStyle(self, style):
         self._style = style

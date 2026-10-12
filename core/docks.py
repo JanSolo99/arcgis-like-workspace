@@ -11,6 +11,19 @@ from .compat import BOTTOM_DOCK_WIDGET_AREA, LEFT_DOCK_WIDGET_AREA, RIGHT_DOCK_W
 
 logger = logging.getLogger(__name__)
 
+#: Lookup specs for the native docks this plugin arranges: exact object
+#: names first (stable across QGIS 3.28-4.x and, unlike titles, across UI
+#: languages -- read off a QGIS 4.2 session), then title/object-name
+#: substrings as a fallback for builds that name them differently.
+#: "IdentifyResultsDock" is QGIS's name for the lazily-created Identify
+#: Results dock, which may not exist yet at Apply time.
+CONTENTS_DOCK = (["Layers"], ["layers", "layer tree", "legend", "toc"], ["styling", "style", "symbology"])
+CATALOG_DOCK = (["Browser"], ["browser"], ["browser2", "(2)"])
+GEOPROCESSING_DOCK = (["ProcessingToolbox"], ["processing"], [])
+SYMBOLOGY_DOCK = (["LayerStyling"], ["styling", "style", "symbology"], [])
+IDENTIFY_RESULTS_DOCK = (["IdentifyResultsDock"], ["identify results"], [])
+LOG_MESSAGES_DOCK = (["MessageLog"], ["log messages"], [])
+
 
 class DockArranger:
     """Rearranges and renames native QGIS dock widgets, reversibly."""
@@ -23,17 +36,14 @@ class DockArranger:
         """Rearrange dock widgets: Contents on the left; Catalog, Geoprocessing,
         Symbology, and Identify Results stacked on the right; Log Messages at
         the bottom (kept hidden -- it also feeds the Notifications dock)."""
-        contents = self.find_dock(
-            ["layers", "layer tree", "legend", "toc"],
-            exclude=["styling", "style", "symbology"],
-        )
-        catalog = self.find_dock(["browser"])
-        geoprocessing = self.find_dock(["processing"])
-        symbology = self.find_dock(["styling", "style", "symbology"])
+        contents = self.find_named_dock(CONTENTS_DOCK)
+        catalog = self.find_named_dock(CATALOG_DOCK)
+        geoprocessing = self.find_named_dock(GEOPROCESSING_DOCK)
+        symbology = self.find_named_dock(SYMBOLOGY_DOCK)
         # Promoted in place of a custom Attributes pane -- QGIS's native
         # Identify Results dock is a ready-made, selection/click-driven
         # feature inspector with zero edit-buffer-conflict risk.
-        identify_results = self.find_dock(["identify results"])
+        identify_results = self.find_named_dock(IDENTIFY_RESULTS_DOCK)
 
         if contents is not None:
             self.rename_dock(contents, "Contents")
@@ -61,7 +71,7 @@ class DockArranger:
         if right_anchor is not None:
             right_anchor.raise_()
 
-        log_messages = self.find_dock(["log messages"])
+        log_messages = self.find_named_dock(LOG_MESSAGES_DOCK)
         if log_messages is not None:
             self.rename_dock(log_messages, "Log Messages")
             self._move_dock(log_messages, BOTTOM_DOCK_WIDGET_AREA)
@@ -84,10 +94,27 @@ class DockArranger:
         self.window.removeDockWidget(dock)
         self.window.addDockWidget(area, dock)
 
-    def find_dock(self, tokens: List[str], exclude: Optional[List[str]] = None) -> Optional[QDockWidget]:
-        """Return the first dock whose name/title matches any *tokens* but none of *exclude*."""
+    def find_named_dock(self, spec) -> Optional[QDockWidget]:
+        """Look up a dock by one of the *_DOCK specs above."""
+        object_names, tokens, exclude = spec
+        return self.find_dock(tokens, exclude=exclude, object_names=object_names)
+
+    def find_dock(
+        self,
+        tokens: List[str],
+        exclude: Optional[List[str]] = None,
+        object_names: Optional[List[str]] = None,
+    ) -> Optional[QDockWidget]:
+        """Return the dock whose object name is exactly one of *object_names*
+        or, failing that, the first whose name/title matches any *tokens*
+        but none of *exclude*."""
         exclude = exclude or []
         docks = self.window.findChildren(QDockWidget)
+
+        for name in object_names or []:
+            for dock in docks:
+                if dock.objectName() == name:
+                    return dock
 
         for dock in docks:
             haystack = f"{dock.objectName()} {dock.windowTitle()}".lower()

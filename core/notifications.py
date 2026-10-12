@@ -15,13 +15,50 @@ from qgis.PyQt.QtWidgets import QDockWidget, QListWidget
 from .compat import BOTTOM_DOCK_WIDGET_AREA, QGIS_CRITICAL, QGIS_WARNING
 from .constants import OBJECT_PREFIX
 from .reversible import ConnectionTracker
-from .toolbars import standard_icon
+from .toolbars import theme_icon
 
 logger = logging.getLogger(__name__)
 
 _RELEVANT_LOG_LEVELS = (QGIS_WARNING, QGIS_CRITICAL)
 _MAX_ENTRIES = 200
 _BASE_LABEL = "Notifications"
+#: QGIS's own Log Messages icon -- the closest native match to Pro's bell.
+_ICON_NAME = "/mMessageLog.svg"
+_BADGE_ICON_SIZE = 32
+
+
+def _badge_icon(base_icon, count: int):
+    """Return *base_icon* with a red unread-count badge painted on its
+    top-right corner, or None if painting isn't possible (e.g. no GUI)."""
+    try:
+        from qgis.PyQt.QtCore import QRectF, Qt
+        from qgis.PyQt.QtGui import QColor, QIcon, QPainter
+
+        pixmap = base_icon.pixmap(_BADGE_ICON_SIZE, _BADGE_ICON_SIZE)
+        painter = QPainter(pixmap)
+        try:
+            hints = getattr(QPainter, "RenderHint", QPainter)
+            painter.setRenderHint(hints.Antialiasing)
+            text = "99+" if count > 99 else str(count)
+            diameter = _BADGE_ICON_SIZE * 0.6
+            width = max(diameter, diameter * 0.45 * len(text))
+            rect = QRectF(_BADGE_ICON_SIZE - width, 0, width, diameter)
+            painter.setPen(getattr(getattr(Qt, "PenStyle", Qt), "NoPen"))
+            painter.setBrush(QColor("#d83b01"))
+            painter.drawRoundedRect(rect, diameter / 2, diameter / 2)
+            font = painter.font()
+            font.setBold(True)
+            font.setPixelSize(round(diameter * 0.7))
+            painter.setFont(font)
+            painter.setPen(QColor("#ffffff"))
+            align = getattr(getattr(Qt, "AlignmentFlag", Qt), "AlignCenter")
+            painter.drawText(rect, align, text)
+        finally:
+            painter.end()
+        return QIcon(pixmap)
+    except Exception:
+        logger.debug("ArcGIS-like Workspace: could not paint the notifications badge", exc_info=True)
+        return None
 
 
 class NotificationsDock:
@@ -35,6 +72,7 @@ class NotificationsDock:
         self.toggle_action = None
         self._connections = ConnectionTracker()
         self._unread = 0
+        self._base_icon = None
 
     def apply(self):
         """Dock/signal setup is idempotent (once per apply-restore cycle),
@@ -53,7 +91,8 @@ class NotificationsDock:
 
             self.toggle_action = self.dock.toggleViewAction()
             self.toggle_action.setText(_BASE_LABEL)
-            self.toggle_action.setIcon(standard_icon("SP_MessageBoxInformation"))
+            self._base_icon = theme_icon(_ICON_NAME, "SP_MessageBoxInformation")
+            self.toggle_action.setIcon(self._base_icon)
             self.toggle_action.toggled.connect(self._on_visibility_toggled)
 
             # QgsMessageLog.logMessage() and QgsTask's lifecycle signals are
@@ -95,6 +134,7 @@ class NotificationsDock:
         self.dock = None
         self.list_widget = None
         self._unread = 0
+        self._base_icon = None
 
     # -- signal handlers ----------------------------------------------------
 
@@ -160,9 +200,20 @@ class NotificationsDock:
             self._update_badge()
 
     def _update_badge(self):
+        """Paint the unread count onto the icon, like Pro's bell. If painting
+        isn't possible, fall back to a "Notifications (N)" text badge."""
         if self.toggle_action is None:
             return
-        if self._unread:
-            self.toggle_action.setText(f"{_BASE_LABEL} ({self._unread})")
-        else:
+        tooltip = f"{self._unread} unread notification(s)" if self._unread else _BASE_LABEL
+        self.toggle_action.setToolTip(tooltip)
+        if not self._unread:
             self.toggle_action.setText(_BASE_LABEL)
+            if self._base_icon is not None:
+                self.toggle_action.setIcon(self._base_icon)
+            return
+        icon = _badge_icon(self._base_icon, self._unread) if self._base_icon is not None else None
+        if icon is not None:
+            self.toggle_action.setIcon(icon)
+            self.toggle_action.setText(_BASE_LABEL)
+        else:
+            self.toggle_action.setText(f"{_BASE_LABEL} ({self._unread})")
